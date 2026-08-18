@@ -1,0 +1,46 @@
+model_name: Qwen/Qwen2.5-1.5B-Instruct
+dtype: bfloat16
+device: cuda
+adapter_rank: 8
+adapter_layers: 4
+adapter_scale: 1.0
+train_size: 128
+val_size: 64
+test_size: 128
+run_test_evaluation: true
+subset_seed: 2026
+min_reasoning_lines: 2
+max_reasoning_lines: 3
+max_answer_magnitude: 100000
+methods: [base, bp_grpo, fo_pg, fo_npg, focus_npg]
+seeds: [0, 1, 2]
+steps: 40
+batch_size: 2
+group_size: 8
+max_prompt_tokens: 256
+max_new_tokens: 192
+sampling_temperature: 0.8
+scoring_micro_batch_size: 4
+eval_interval: 10
+eval_batch_size: 4
+numeric_shaping_weight: 0.1
+calibration_examples: 32
+wandb_project: rl-no-backward
+wandb_mode: offline
+backprop:
+  learning_rate: 0.003
+  epochs_per_rollout: 1
+  clip_epsilon: 0.2
+  max_grad_norm: 1.0
+  scoring_micro_batch_size: 4
+forward:
+  directions: 4
+  finite_difference_mu: 1.0
+  fisher_damping: 0.2
+  kl_budget: 0.001
+  clip_epsilon: 0.2
+  max_step_norm: 0.25
+  line_search_steps: 10
+  active_rank: 2
+  history_size: 12
+  scoring_micro_batch_size: 4

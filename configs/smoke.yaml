@@ -1,0 +1,32 @@
+model_name: Qwen/Qwen2.5-0.5B-Instruct
+dtype: bfloat16
+device: cuda
+adapter_rank: 4
+adapter_layers: 2
+adapter_scale: 1.0
+action_count: 4
+task_variant: codebook
+prompt_mode: disclosed
+split_seed: 0
+methods: [base, bp_grpo, es, fo_pg, fo_npg, focus_npg]
+seeds: [0]
+steps: 2
+batch_size: 4
+group_size: 4
+eval_interval: 1
+baseline: loo
+calibration_examples: 16
+wandb_mode: disabled
+backprop:
+  learning_rate: 0.03
+  epochs_per_rollout: 1
+forward:
+  directions: 2
+  finite_difference_mu: 0.5
+  fisher_damping: 0.1
+  kl_budget: 0.02
+  max_step_norm: 2.0
+  active_rank: 1
+  history_size: 4
+  es_sigma: 0.5
+  es_step_norm: 0.25
