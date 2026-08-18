@@ -1,0 +1,161 @@
+{
+  "created_at": "2026-08-18T23:18:56.588731+00:00",
+  "experiment": {
+    "request": {
+      "bits_per_sample": 12,
+      "channel": "power",
+      "duration_s": 20.0,
+      "gain_db": 10.0,
+      "mode": "stream",
+      "pretrigger_s": 0.0,
+      "sample_rate_hz": 100000.0
+    },
+    "resolved": {
+      "bits_per_sample": 12,
+      "decimation": 1500,
+      "details": {
+        "gain_db": 10.0,
+        "max_samples_hw": 327828,
+        "max_samples_safe": 213088,
+        "max_stream_rate_hz": 10000000.0,
+        "stream_arm_settle_s": 0.001,
+        "stream_fast_fifo": false,
+        "stream_segment_size": 65536,
+        "trigger": "force",
+        "usb_read_mode": "auto"
+      },
+      "duration_s": 20.0,
+      "mode": "stream",
+      "pretrigger_samples": 0,
+      "raw_sample_rate_hz": 150000000.0,
+      "sample_rate_hz": 100000.0,
+      "samples": 2000000,
+      "warnings": []
+    },
+    "retry": {
+      "backoff_s": 0.0,
+      "max_attempts": 1,
+      "recover_sampler": false
+    },
+    "sampler": {
+      "auxiliaries": [
+        {
+          "backend": "nvml",
+          "clock_domain": "host_monotonic",
+          "gpu_index": 0,
+          "interval_s": 0.01
+        }
+      ],
+      "backend": "composite",
+      "primary": {
+        "adc_error_controls": {
+          "clip_errors_disabled_readback": false,
+          "clip_errors_disabled_requested": false,
+          "clip_errors_disabled_supported": true,
+          "lo_gain_errors_disabled_readback": true,
+          "lo_gain_errors_disabled_required": true,
+          "sidecapture_adc_clipping_validator_enabled": true
+        },
+        "backend": "chipwhisperer",
+        "chipwhisperer_version": "6.0.0+isl.1",
+        "clock_hz": 150000000.0,
+        "product_id": "0xace6",
+        "resolved": {
+          "bits_per_sample": 12,
+          "decimation": 1500,
+          "details": {
+            "gain_db": 10.0,
+            "max_samples_hw": 327828,
+            "max_samples_safe": 213088,
+            "max_stream_rate_hz": 10000000.0,
+            "stream_arm_settle_s": 0.001,
+            "stream_fast_fifo": false,
+            "stream_segment_size": 65536,
+            "trigger": "force",
+            "usb_read_mode": "auto"
+          },
+          "duration_s": 20.0,
+          "mode": "stream",
+          "pretrigger_samples": 0,
+          "raw_sample_rate_hz": 150000000.0,
+          "sample_rate_hz": 100000.0,
+          "samples": 2000000,
+          "warnings": []
+        },
+        "safe_memory_fraction": 0.65,
+        "serial_number": "50203220325531583230313235303038",
+        "streaming_controls": {
+          "actual_trigger_mode_readback": "force",
+          "adc_stream_mode_readback": true,
+          "max_stream_rate_hz_configured": 10000000.0,
+          "requested_mode": "stream",
+          "requested_trigger_mode": "auto",
+          "resolved_mode": "stream",
+          "stream_arm_settle_s_requested": 0.001,
+          "stream_fast_fifo_requested": false,
+          "stream_segment_size_configured": 65536,
+          "stream_segment_size_readback": 65536
+        },
+        "trigger": "auto",
+        "usb_read_mode": "auto"
+      }
+    },
+    "trigger_delay_s": 1.0,
+    "validators": [
+      "FiniteValidator",
+      "ExpectedLengthValidator",
+      "VarianceValidator",
+      "FlatlineValidator",
+      "ADCClippingValidator",
+      "AnnotationBoundsValidator"
+    ],
+    "warmup": 0,
+    "workload": {
+      "method": "bp_grpo",
+      "replay_safe": false,
+      "scope": "optimizer_update_only",
+      "seed": 0,
+      "step": 1,
+      "type": "matched_lora_one_shot_optimizer"
+    },
+    "workload_sync": "none"
+  },
+  "identity_hash": "b5c175d28db47c1280c47db5dd031cfafadd8e6eefea9ccc30cc8e8912652021",
+  "provenance": {
+    "cuda": {
+      "available": true,
+      "device_count": 1,
+      "devices": [
+        {
+          "index": 0,
+          "name": "NVIDIA H100 PCIe"
+        }
+      ],
+      "torch_cuda_version": "13.0"
+    },
+    "git": {
+      "commit": "a76a1ee03db10d52a53470b01eb1861ccbfb9ddb",
+      "dirty": false,
+      "origin": "https://github.com/anpaure/rl-no-backward.git",
+      "root": "/home/amodo/rl-no-backward-matched"
+    },
+    "hostname": "arboghast",
+    "machine": "x86_64",
+    "packages": {
+      "chipwhisperer": "6.0.0+isl.1",
+      "numpy": "1.26.4",
+      "nvidia-ml-py": "13.610.43",
+      "sidecapture": "0.1.1",
+      "torch": "2.11.0+cu130",
+      "transformers": "5.15.0"
+    },
+    "pid": 3110632,
+    "platform": "Linux-6.8.0-136-generic-x86_64-with-glibc2.39",
+    "python": "3.12.13 (main, Apr  7 2026, 20:45:25) [Clang 22.1.1 ]",
+    "python_executable": "/home/amodo/rl-no-backward-opt/.venv-vllm-managed/bin/python"
+  },
+  "publishing": {
+    "sinks": []
+  },
+  "schema_version": "sidecapture.dataset/v1"
+}

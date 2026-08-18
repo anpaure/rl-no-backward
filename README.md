@@ -85,6 +85,23 @@ reproducibility, but are **not headline efficacy results**:
 No final BP-versus-FO efficacy claim is made until the corrected matched sweep
 passes its gates and the locked final partition is evaluated once.
 
+### ChipWhisperer optimizer capture
+
+The repository also contains a matched, descriptive n=1 hardware capture of
+one BP-GRPO update and one backward-free FO-NPG update. Both updates use the
+same initialization and 32 frozen responses. A ChipWhisperer Husky Plus records
+the external AC-coupled power proxy in true-stream mode while timestamped NVML
+provides the auxiliary watt measurements.
+
+In this capture, BP-GRPO took 1.033 s and 193.7 J of raw NVML energy; FO-NPG
+took 5.226 s and 1,657.6 J. The backward-free update executed zero backward
+calls, but its q=8 two-sided probes and line search required 19 logical policy
+evaluations, making it 5.06x slower and 8.56x higher-energy for this update.
+These are single traces without a repeat-based uncertainty interval, not a
+population estimate. See the [capture report](artifacts/matched_lora_power_trace/README.md),
+[plot](artifacts/matched_lora_power_trace/figures/power_trace_comparison.png),
+and raw SideCapture stores under `artifacts/matched_lora_power_trace/`.
+
 ## H100 setup
 
 The project uses `uv`. FlashAttention is installed from the requested

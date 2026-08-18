@@ -1,0 +1,52 @@
+{
+  "capture_count_per_child": 1,
+  "capture_order": [
+    "bp_grpo",
+    "fo_npg"
+  ],
+  "child_process_count": 2,
+  "config_sha256": "f1be5d3f63c8d6b693d2f43ffc746d72278b47000c7bac8486797a4ffae30501",
+  "max_attempts_per_child": 1,
+  "methods": [
+    "bp_grpo",
+    "fo_npg"
+  ],
+  "plan_receipt_sha256": "1c054fd02f0c01ff62c2050d7cf1a48901ee64e5e48fc26220009c9f8e9c3a85",
+  "power_capture_config": {
+    "bits_per_sample": 12,
+    "capture_count": 1,
+    "channel": "power",
+    "chipwhisperer_commit": "ed0ed33efbc55421f4e1d995816fd50a5b2e5d01",
+    "chipwhisperer_ref": "v6.0.0-isl.1",
+    "chipwhisperer_version": "6.0.0+isl.1",
+    "clock_hz": 150000000.0,
+    "cuda_annotation_sync": "both",
+    "duration": "20s",
+    "gain_db": 10.0,
+    "max_attempts": 1,
+    "max_stream_rate_hz": 10000000.0,
+    "mode": "stream",
+    "nvml_auxiliary": true,
+    "nvml_gpu_index": 0,
+    "nvml_interval_s": 0.01,
+    "product_id": 44262,
+    "safe_memory_fraction": 0.65,
+    "sample_rate": "100kHz",
+    "serial_number": "50203220325531583230313235303038",
+    "sidecapture_commit": "c1ef46862a72b8557af03d781200d226fcda738e",
+    "sidecapture_version": "0.1.1",
+    "stream_arm_settle_s": 0.001,
+    "stream_fast_fifo": false,
+    "stream_segment_size": 65536,
+    "trace_dtype": "float32",
+    "trigger": "auto",
+    "trigger_delay_s": 1.0,
+    "usb_read_mode": "auto",
+    "warmup": 0,
+    "workload_sync": "none"
+  },
+  "schema": "rl-no-backward-matched-lora-power-launch-plan-v1",
+  "seed": 0,
+  "source_commit": "a76a1ee03db10d52a53470b01eb1861ccbfb9ddb",
+  "step": 1
+}

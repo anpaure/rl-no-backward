@@ -1,0 +1,84 @@
+[
+  {
+    "clock_domain": "host_monotonic",
+    "end": null,
+    "end_sample": null,
+    "kind": "mark",
+    "mapping": {
+      "method": "host_monotonic_trigger_delta",
+      "trigger_source": "chipwhisperer.force"
+    },
+    "metadata": {
+      "candidate_digest": "3ceb2d69a7381e36469bf5b3ed864e6bb8ccc305773c8ae912d8bbdfc36314ab",
+      "method": "fo_npg",
+      "seed": 0,
+      "step": 1
+    },
+    "name": "fo_npg.optimizer.ready",
+    "start": 1150367743179221,
+    "start_sample": 100021,
+    "sync": "none"
+  },
+  {
+    "clock_domain": "cuda",
+    "end": 5225.75439453125,
+    "end_sample": 622617,
+    "kind": "interval",
+    "mapping": {
+      "cuda_origin_enqueue_ns": 1150367743383888,
+      "method": "host_trigger_plus_cuda_origin_enqueue_plus_cuda_elapsed",
+      "trigger_source": "chipwhisperer.force",
+      "warning": "projected across host, CUDA, and sampler clock domains"
+    },
+    "metadata": {
+      "candidate_digest": "3ceb2d69a7381e36469bf5b3ed864e6bb8ccc305773c8ae912d8bbdfc36314ab",
+      "method": "fo_npg",
+      "seed": 0,
+      "step": 1
+    },
+    "name": "fo_npg.optimizer.cuda",
+    "start": 0.012992000207304955,
+    "start_sample": 100043,
+    "sync": "both"
+  },
+  {
+    "clock_domain": "host_monotonic",
+    "end": 1150372969209739,
+    "end_sample": 622624,
+    "kind": "interval",
+    "mapping": {
+      "method": "host_monotonic_trigger_delta",
+      "trigger_source": "chipwhisperer.force"
+    },
+    "metadata": {
+      "candidate_digest": "3ceb2d69a7381e36469bf5b3ed864e6bb8ccc305773c8ae912d8bbdfc36314ab",
+      "method": "fo_npg",
+      "seed": 0,
+      "step": 1
+    },
+    "name": "fo_npg.optimizer.host",
+    "start": 1150367743203047,
+    "start_sample": 100024,
+    "sync": "none"
+  },
+  {
+    "clock_domain": "host_monotonic",
+    "end": null,
+    "end_sample": null,
+    "kind": "mark",
+    "mapping": {
+      "method": "host_monotonic_trigger_delta",
+      "trigger_source": "chipwhisperer.force"
+    },
+    "metadata": {
+      "candidate_digest": "3ceb2d69a7381e36469bf5b3ed864e6bb8ccc305773c8ae912d8bbdfc36314ab",
+      "method": "fo_npg",
+      "seed": 0,
+      "step": 1
+    },
+    "name": "fo_npg.optimizer.complete",
+    "start": 1150372969314847,
+    "start_sample": 622635,
+    "sync": "none"
+  }
+]

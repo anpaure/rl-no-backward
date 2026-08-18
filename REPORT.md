@@ -39,6 +39,36 @@ run into 256 development IDs and 679 locked final IDs. Training processes load
 only the committed development source indices. The locked partition will be
 evaluated once after methods, hyperparameters, steps, and seeds are frozen.
 
+## Matched ChipWhisperer power trace (complete)
+
+One BP-GRPO optimizer update and one backward-free FO-NPG update were captured
+from the same initial LoRA policy and the same 32-response fixed rollout. Each
+method ran in an isolated process. SideCapture recorded one healthy 20 s,
+100 kHz true-stream ChipWhisperer trace per method; the optimizer interval was
+marked inside that stream, and an auxiliary 100 Hz NVML channel supplied watts.
+
+| Metric | BP-GRPO | FO-NPG | FO / BP |
+|---|---:|---:|---:|
+| Backward calls | 4 | 0 | — |
+| Optimizer time | 1.033 s | 5.226 s | 5.06x |
+| Logical policy evaluations | 2 | 19 | 9.50x |
+| Mean NVML power | 187.6 W | 317.2 W | 1.69x |
+| Peak NVML power | 305.4 W | 352.1 W | 1.15x |
+| Raw NVML energy | 193.7 J | 1,657.6 J | 8.56x |
+
+The result answers the narrow speed question negatively for this q=8
+implementation: eliminating reverse mode does not compensate for sixteen
+two-sided probe scores plus line-search rescoring. The forward-only step is
+longer and substantially more energy-intensive even though it executes no
+backward call. Its external ChipWhisperer AC RMS is lower (0.01067 versus
+0.01549), showing why that AC-coupled, uncalibrated amplitude proxy must not be
+mistaken for total watts or integrated as energy; NVML supplies the energy
+comparison.
+
+This is descriptive n=1 evidence with no repeat-based uncertainty interval.
+The matched digests, raw channels, health receipts, figure, and CSV are in
+`artifacts/matched_lora_power_trace/`.
+
 ## Pending result table
 
 The final report will include, for the base model, BP-GRPO, and FO-NPG:

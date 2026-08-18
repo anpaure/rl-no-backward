@@ -1,0 +1,125 @@
+# Exactly two one-shot physical traces: the seed-0, step-1 BP-GRPO and FO-NPG
+# updates consume identical Qwen2.5-1.5B LoRA initialization and frozen vLLM
+# rollout. No evaluation or W&B process is started by the capture runner.
+model_name: Qwen/Qwen2.5-1.5B-Instruct
+model_revision: 989aa7980e4cf806f80c7fef2b1adb7bc71aa306
+dataset_revision: 740312add88f781978c0658806c59bc2815b9866
+dtype: bfloat16
+device: cuda
+attention_implementation: flash_attention_2
+
+train_size: 4
+dev_size: 256
+evaluation_manifest: configs/gsm8k_standard_lora_eval_manifest.json
+dev_source_index_receipt: configs/gsm8k_standard_lora_dev_source_indices.json
+touched_test_exclusions: configs/gsm8k_touched_test_exclusions.json
+subset_seed: 314159
+methods: [base, bp_grpo, fo_npg]
+seeds: [0]
+steps: 1
+batch_size: 4
+group_size: 8
+schedule_mode: fixed_overfit
+max_prompt_tokens: 256
+max_new_tokens: 512
+sampling_temperature: 1.0
+scoring_micro_batch_size: 16
+eval_interval: 1
+eval_batch_size: 64
+run_test_evaluation: false
+test_size: 0
+record_rollout_provenance: true
+
+rollout_backend: vllm_lora
+vllm_kv_cache_memory_bytes: 2147483648
+vllm_enforce_eager: false
+vllm_flash_attn_version: 2
+vllm_batch_invariant: false
+vllm_enable_v1_multiprocessing: false
+vllm_allow_insecure_serialization: false
+vllm_logprob_mean_abs_tolerance: 0.02
+vllm_logprob_p99_abs_tolerance: 0.2
+vllm_logprob_max_abs_tolerance: 5.0
+minimum_effective_completion_fraction: 0.5
+run_projected_gradient_gate: true
+projected_gradient_min_cosine: 0.90
+projected_gradient_max_relative_l2: 0.45
+minimum_bp_train_accuracy_gain: 0.0
+minimum_bp_dev_accuracy_gain: 0.0
+enforce_stochastic_efficacy_checks: false
+
+expected_lora_parameter_count: 1089536
+shared_initialization_path_template: artifacts/shared_initializations/qwen25_1p5b_qv_r8_all28_seed{seed}.pt
+wandb_project: rl-no-backward
+wandb_mode: disabled
+
+lora:
+  rank: 8
+  alpha: 16
+  dropout: 0.0
+  target_modules: [q_proj, v_proj]
+  layer_indices: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27]
+  bias: none
+
+objective:
+  clip_epsilon: 0.2
+  advantage_epsilon: 0.0001
+  inference_correction_mode: sequence_mask
+  inference_ratio_min: null
+  inference_ratio_max: 3.0
+
+backprop:
+  learning_rate: 0.00001
+  weight_decay: 0.0
+  max_grad_norm: 1.0
+  prompt_groups_per_micro_batch: 1
+  fused_adamw: true
+  scheduler_type: linear
+  warmup_ratio: 0.1
+
+forward:
+  directions: 8
+  finite_difference_mu: 10.0
+  fisher_damping: 0.2
+  kl_budget: 0.001
+  max_step_norm: 0.1
+  line_search_steps: 6
+  line_search_decay: 0.5
+  minimum_surrogate_improvement: -0.00000001
+  scoring_micro_batch_size: 16
+
+power_capture:
+  # Explicit slow-FIFO streaming at the H100-validated divider. The 2,000,000
+  # samples intentionally exceed burst memory; auto/burst fallback and the
+  # corrupt Husky fast-FIFO path are both rejected by the capture validator.
+  duration: 20s
+  sample_rate: 100kHz
+  mode: stream
+  bits_per_sample: 12
+  gain_db: 10.0
+  channel: power
+  serial_number: "50203220325531583230313235303038"
+  product_id: 44262
+  clock_hz: 150000000.0
+  safe_memory_fraction: 0.65
+  max_stream_rate_hz: 10000000.0
+  stream_segment_size: 65536
+  stream_fast_fifo: false
+  stream_arm_settle_s: 0.001
+  trigger: auto
+  usb_read_mode: auto
+  trigger_delay_s: 1.0
+  capture_count: 1
+  max_attempts: 1
+  warmup: 0
+  workload_sync: none
+  cuda_annotation_sync: both
+  trace_dtype: float32
+  nvml_auxiliary: true
+  nvml_gpu_index: 0
+  nvml_interval_s: 0.01
+  sidecapture_version: 0.1.1
+  sidecapture_commit: c1ef46862a72b8557af03d781200d226fcda738e
+  chipwhisperer_ref: v6.0.0-isl.1
+  chipwhisperer_version: 6.0.0+isl.1
+  chipwhisperer_commit: ed0ed33efbc55421f4e1d995816fd50a5b2e5d01

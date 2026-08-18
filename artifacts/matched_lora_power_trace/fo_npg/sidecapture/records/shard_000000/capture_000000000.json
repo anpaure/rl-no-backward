@@ -1,0 +1,303 @@
+{
+  "annotations": {
+    "count": 4,
+    "path": "annotations/shard_000000/capture_000000000.json"
+  },
+  "artifacts": {
+    "matched_candidate": {
+      "format": "json",
+      "path": "artifacts/shard_000000/capture_000000000.matched_candidate.json"
+    },
+    "optimizer_result": {
+      "format": "json",
+      "path": "artifacts/shard_000000/capture_000000000.optimizer_result.json"
+    }
+  },
+  "attempt": 1,
+  "batch_metadata": {
+    "auxiliaries": {
+      "NVMLSampler": {
+        "rows": 2008
+      }
+    },
+    "primary": {
+      "adc_errors": 0,
+      "normal_fifo_enforced_before_trigger": true,
+      "scope_info": {
+        "bits_per_sample": 12,
+        "decimation": 1500,
+        "details": {
+          "gain_db": 10.0,
+          "max_samples_hw": 327828,
+          "max_samples_safe": 213088,
+          "max_stream_rate_hz": 10000000.0,
+          "stream_arm_settle_s": 0.001,
+          "stream_fast_fifo": false,
+          "stream_segment_size": 65536,
+          "trigger": "force",
+          "usb_read_mode": "auto"
+        },
+        "duration_s": 20.0,
+        "mode": "stream",
+        "pretrigger_samples": 0,
+        "raw_sample_rate_hz": 150000000.0,
+        "sample_rate_hz": 100000.0,
+        "samples": 2000000,
+        "warnings": []
+      },
+      "slow_fifo_trigger_executed": true,
+      "stream_arm_settle_s": 0.001,
+      "stream_fast_fifo": false
+    }
+  },
+  "captured_at": "2026-08-18T23:20:10.288791+00:00",
+  "channels": {
+    "nvml.gpu_utilization_pct": {
+      "dtype": "float32",
+      "metadata": {
+        "clock_domain": "host_monotonic"
+      },
+      "path": "channels/nvml.gpu_utilization_pct/shard_000000/capture_000000000.npy",
+      "sample_rate_hz": 100.0,
+      "shape": [
+        2008
+      ],
+      "timestamp_clock": "host_monotonic_ns",
+      "timestamps_path": "timestamps/nvml.gpu_utilization_pct/shard_000000/capture_000000000.npy",
+      "unit": "%"
+    },
+    "nvml.memory_clock_mhz": {
+      "dtype": "float32",
+      "metadata": {
+        "clock_domain": "host_monotonic"
+      },
+      "path": "channels/nvml.memory_clock_mhz/shard_000000/capture_000000000.npy",
+      "sample_rate_hz": 100.0,
+      "shape": [
+        2008
+      ],
+      "timestamp_clock": "host_monotonic_ns",
+      "timestamps_path": "timestamps/nvml.memory_clock_mhz/shard_000000/capture_000000000.npy",
+      "unit": "MHz"
+    },
+    "nvml.memory_utilization_pct": {
+      "dtype": "float32",
+      "metadata": {
+        "clock_domain": "host_monotonic"
+      },
+      "path": "channels/nvml.memory_utilization_pct/shard_000000/capture_000000000.npy",
+      "sample_rate_hz": 100.0,
+      "shape": [
+        2008
+      ],
+      "timestamp_clock": "host_monotonic_ns",
+      "timestamps_path": "timestamps/nvml.memory_utilization_pct/shard_000000/capture_000000000.npy",
+      "unit": "%"
+    },
+    "nvml.power_w": {
+      "dtype": "float32",
+      "metadata": {
+        "clock_domain": "host_monotonic"
+      },
+      "path": "channels/nvml.power_w/shard_000000/capture_000000000.npy",
+      "sample_rate_hz": 100.0,
+      "shape": [
+        2008
+      ],
+      "timestamp_clock": "host_monotonic_ns",
+      "timestamps_path": "timestamps/nvml.power_w/shard_000000/capture_000000000.npy",
+      "unit": "W"
+    },
+    "nvml.sm_clock_mhz": {
+      "dtype": "float32",
+      "metadata": {
+        "clock_domain": "host_monotonic"
+      },
+      "path": "channels/nvml.sm_clock_mhz/shard_000000/capture_000000000.npy",
+      "sample_rate_hz": 100.0,
+      "shape": [
+        2008
+      ],
+      "timestamp_clock": "host_monotonic_ns",
+      "timestamps_path": "timestamps/nvml.sm_clock_mhz/shard_000000/capture_000000000.npy",
+      "unit": "MHz"
+    },
+    "nvml.temperature_c": {
+      "dtype": "float32",
+      "metadata": {
+        "clock_domain": "host_monotonic"
+      },
+      "path": "channels/nvml.temperature_c/shard_000000/capture_000000000.npy",
+      "sample_rate_hz": 100.0,
+      "shape": [
+        2008
+      ],
+      "timestamp_clock": "host_monotonic_ns",
+      "timestamps_path": "timestamps/nvml.temperature_c/shard_000000/capture_000000000.npy",
+      "unit": "C"
+    },
+    "power": {
+      "dtype": "float32",
+      "metadata": {
+        "bits_per_sample": 12,
+        "calibrated": false,
+        "gain_db": 10.0
+      },
+      "path": "channels/power/shard_000000/capture_000000000.npy",
+      "sample_rate_hz": 100000.0,
+      "shape": [
+        2000000
+      ],
+      "unit": "normalized_adc"
+    }
+  },
+  "health": {
+    "issues": [],
+    "metrics": {
+      "annotations.out_of_bounds": 0,
+      "nvml.gpu_utilization_pct.finite_fraction": 1.0,
+      "nvml.memory_clock_mhz.finite_fraction": 1.0,
+      "nvml.memory_utilization_pct.finite_fraction": 1.0,
+      "nvml.power_w.finite_fraction": 1.0,
+      "nvml.sm_clock_mhz.finite_fraction": 1.0,
+      "nvml.temperature_c.finite_fraction": 1.0,
+      "power.finite_fraction": 1.0,
+      "primary.adc_rail_fraction": 0.0,
+      "primary.adc_robust_high": 0.05126953125,
+      "primary.adc_robust_low": -0.044677734375,
+      "primary.adc_robust_span": 0.095947265625,
+      "primary.expected_samples": 2000000,
+      "primary.max_equal_run_fraction": 2e-06,
+      "primary.samples": 2000000,
+      "primary.std": 0.024435938969427626
+    },
+    "ok": true
+  },
+  "index": 0,
+  "labels": {
+    "candidate_digest": "3ceb2d69a7381e36469bf5b3ed864e6bb8ccc305773c8ae912d8bbdfc36314ab",
+    "experiment": "matched_lora_bp_vs_fo_power",
+    "method": "fo_npg",
+    "scope": "optimizer_update_only",
+    "seed": 0,
+    "step": 1
+  },
+  "primary_channel": "power",
+  "result_summary": {
+    "accepted": true,
+    "backward_calls": 0,
+    "derivative_variance": 8.923010108574658e-10,
+    "empirical_kl": 0.0004708611231762916,
+    "environment_samples": 32,
+    "fisher_condition": 3.8928842544555664,
+    "focus_a_rank": null,
+    "focus_a_update_count": null,
+    "focus_b_rank": null,
+    "focus_b_update_count": null,
+    "focus_bootstrap_b_only": null,
+    "focus_cross_sketch_count": null,
+    "focus_first_half_prompts": null,
+    "focus_second_half_prompts": null,
+    "focus_state_numel": null,
+    "focus_state_numel_cap": null,
+    "focus_state_update_policy_evaluations": null,
+    "forward_calls": 38,
+    "grpo_loss_after": -0.007293626666069031,
+    "grpo_loss_before": -0.007270999252796173,
+    "grpo_objective_after": 0.007293626666069031,
+    "grpo_objective_before": 0.007270999252796173,
+    "line_search_candidate_empirical_kl": 0.0004708611231762916,
+    "line_search_candidate_grpo_loss": -0.007293626666069031,
+    "line_search_candidate_grpo_objective": 0.007293626666069031,
+    "line_search_candidate_surrogate_improvement": 2.2627413272857666e-05,
+    "line_search_trials": 3,
+    "optimizer_wall_time_seconds": 5.226025481009856,
+    "policy_evaluations": 19,
+    "projected_gradient_norm": 8.469913882436231e-05,
+    "reward_mean": 0.9375,
+    "scored_tokens": 128079,
+    "step_norm": 0.02500000223517418,
+    "surrogate_improvement": 2.2627413272857666e-05,
+    "teacher_forced_examples": 608,
+    "zero_advantage_fraction": 0.5
+  },
+  "sampler_metadata": {
+    "auxiliaries": [
+      {
+        "backend": "nvml",
+        "clock_domain": "host_monotonic",
+        "gpu_index": 0,
+        "interval_s": 0.01
+      }
+    ],
+    "backend": "composite",
+    "primary": {
+      "adc_error_controls": {
+        "clip_errors_disabled_readback": false,
+        "clip_errors_disabled_requested": false,
+        "clip_errors_disabled_supported": true,
+        "lo_gain_errors_disabled_readback": true,
+        "lo_gain_errors_disabled_required": true,
+        "sidecapture_adc_clipping_validator_enabled": true
+      },
+      "backend": "chipwhisperer",
+      "chipwhisperer_version": "6.0.0+isl.1",
+      "clock_hz": 150000000.0,
+      "product_id": "0xace6",
+      "resolved": {
+        "bits_per_sample": 12,
+        "decimation": 1500,
+        "details": {
+          "gain_db": 10.0,
+          "max_samples_hw": 327828,
+          "max_samples_safe": 213088,
+          "max_stream_rate_hz": 10000000.0,
+          "stream_arm_settle_s": 0.001,
+          "stream_fast_fifo": false,
+          "stream_segment_size": 65536,
+          "trigger": "force",
+          "usb_read_mode": "auto"
+        },
+        "duration_s": 20.0,
+        "mode": "stream",
+        "pretrigger_samples": 0,
+        "raw_sample_rate_hz": 150000000.0,
+        "sample_rate_hz": 100000.0,
+        "samples": 2000000,
+        "warnings": []
+      },
+      "safe_memory_fraction": 0.65,
+      "serial_number": "50203220325531583230313235303038",
+      "streaming_controls": {
+        "actual_trigger_mode_readback": "force",
+        "adc_stream_mode_readback": true,
+        "max_stream_rate_hz_configured": 10000000.0,
+        "requested_mode": "stream",
+        "requested_trigger_mode": "auto",
+        "resolved_mode": "stream",
+        "stream_arm_settle_s_requested": 0.001,
+        "stream_fast_fifo_requested": false,
+        "stream_segment_size_configured": 65536,
+        "stream_segment_size_readback": 65536
+      },
+      "trigger": "auto",
+      "usb_read_mode": "auto"
+    }
+  },
+  "schema_version": "sidecapture.dataset/v1",
+  "trigger": {
+    "host_monotonic_ns": 1150366742965771,
+    "metadata": {
+      "mode": "force"
+    },
+    "source": "chipwhisperer.force"
+  },
+  "workload_metadata": {
+    "method": "fo_npg",
+    "replay_safe": false,
+    "scope": "optimizer_update_only",
+    "seed": 0,
+    "step": 1,
+    "type": "matched_lora_one_shot_optimizer"
+  }
+}

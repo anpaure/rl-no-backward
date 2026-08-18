@@ -1,0 +1,52 @@
+{
+  "behavior_logprob_digest": "eb47ed5a33e7f90588fcabe616cffb527cc3c91b73fe36521b36227b017ee4fa",
+  "behavior_policy_digest": "fc61cc8ca79ddb4d1964b2fa12710e983fb76ced22cf848b4ba57f6a1d011089",
+  "behavior_policy_version": "power-capture/bp_grpo/seed=0/step=1/frozen-rollout",
+  "candidate": {
+    "example_ids": [
+      "0480b5f573c5c011c116",
+      "69ee1cea082d35141890",
+      "dc5d57e2bb4b8ea34d69",
+      "069a7b83258fba8c112d"
+    ],
+    "rollout_seed": 20001,
+    "step": 1
+  },
+  "candidate_digest": "3ceb2d69a7381e36469bf5b3ed864e6bb8ccc305773c8ae912d8bbdfc36314ab",
+  "frozen_base_parameter_digest_before": "6ce080d42e572f097f6d52e7b802e3e5a124d4ddd9a8262e120a21ed915e7012",
+  "hf_old_logprob_digest": "3c703f68aaa97485d34a4dee0f2fe24d41fdf34fe42b4c4ab9cabddc8a0df9cf",
+  "initial_lora_digest": "fc61cc8ca79ddb4d1964b2fa12710e983fb76ced22cf848b4ba57f6a1d011089",
+  "initialization_digest": "fc61cc8ca79ddb4d1964b2fa12710e983fb76ced22cf848b4ba57f6a1d011089",
+  "initialization_file_sha256": "dc30c2662da84317193ac8ac86dc16405bf8a08c2041063aab99ebb90fbce39d",
+  "initialization_path": "/home/amodo/rl-no-backward-matched/artifacts/shared_initializations/qwen25_1p5b_qv_r8_all28_seed0.pt",
+  "old_score_forward_calls": 2,
+  "prompt_example_ids_digest": "4e20163b67f979a1dafa2db6d4b29f141a043756f37e05a4aa99541916bfe7d1",
+  "resolved_model_snapshot": "/home/amodo/.cache/huggingface/hub/models--Qwen--Qwen2.5-1.5B-Instruct/snapshots/989aa7980e4cf806f80c7fef2b1adb7bc71aa306",
+  "responses": 32,
+  "reward_digest": "fe6fea45dc3a45e1b2682141d3325df357a6d1adaec70191c46ec98e215afacc",
+  "rollout_token_digest": "7c8ce728abc7c4aa5e36d99d1c986d57c99232e2fea3b17ccf0a86d8e3a85c5f",
+  "valid_response_tokens": 6741,
+  "vllm_hf_parity": {
+    "vllm_hf_logprob_max_abs_difference": 0.32709574699401855,
+    "vllm_hf_logprob_mean_abs_difference": 0.010242466814815998,
+    "vllm_hf_logprob_p99_abs_difference": 0.11778222769498825
+  },
+  "vllm_reload_receipt": {
+    "active_lora_ids": [
+      1
+    ],
+    "adapter_model_sha256": "fa04840b7589b0e646d420c6591c1e8671a800019ca83e9f0cbc52867356a956",
+    "adapter_path": "/home/amodo/rl-no-backward-results/chipwhisperer-stream-pair-a76a1ee/bp_grpo/vllm_lora_exports/adapter-000001-fc61cc8ca79d",
+    "adapter_path_transient": true,
+    "durable_hash_fields": [
+      "state_digest",
+      "adapter_model_sha256"
+    ],
+    "load_inplace": true,
+    "parameter_count": 1089536,
+    "policy_version": "power-capture/bp_grpo/seed=0/step=1/frozen-rollout",
+    "prefix_cache_reset": true,
+    "state_digest": "fc61cc8ca79ddb4d1964b2fa12710e983fb76ced22cf848b4ba57f6a1d011089",
+    "version": 1
+  }
+}
