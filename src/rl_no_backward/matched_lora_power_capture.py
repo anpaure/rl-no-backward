@@ -115,9 +115,9 @@ def _require_exact_number(value: Any, *, name: str, expected: float) -> float:
 class PowerCaptureConfig:
     """Locked settings for the two one-shot physical captures."""
 
-    duration: str = "10s"
-    sample_rate: str = "20kHz"
-    mode: str = "burst"
+    duration: str = "20s"
+    sample_rate: str = "100kHz"
+    mode: str = "stream"
     bits_per_sample: int = 12
     gain_db: float = 10.0
     channel: str = "power"
@@ -125,6 +125,10 @@ class PowerCaptureConfig:
     product_id: int = 0xACE6
     clock_hz: float = 150_000_000.0
     safe_memory_fraction: float = 0.65
+    max_stream_rate_hz: float = 10_000_000.0
+    stream_segment_size: int = 65_536
+    stream_fast_fifo: bool = False
+    stream_arm_settle_s: float = 0.001
     trigger: str = "auto"
     usb_read_mode: str = "auto"
     trigger_delay_s: float = 1.0
@@ -153,9 +157,9 @@ class PowerCaptureConfig:
 
     def __post_init__(self) -> None:
         exact_strings = {
-            "duration": "10s",
-            "sample_rate": "20kHz",
-            "mode": "burst",
+            "duration": "20s",
+            "sample_rate": "100kHz",
+            "mode": "stream",
             "channel": "power",
             "serial_number": CHIPWHISPERER_SERIAL,
             "trigger": "auto",
@@ -179,6 +183,7 @@ class PowerCaptureConfig:
             "warmup": 0,
             "nvml_gpu_index": 0,
             "product_id": 0xACE6,
+            "stream_segment_size": 65_536,
         }.items():
             _require_exact_int(getattr(self, name), name=f"power_capture.{name}", expected=expected)
         _require_exact_number(self.gain_db, name="power_capture.gain_db", expected=10.0)
@@ -191,6 +196,18 @@ class PowerCaptureConfig:
             self.safe_memory_fraction,
             name="power_capture.safe_memory_fraction",
             expected=0.65,
+        )
+        _require_exact_number(
+            self.max_stream_rate_hz,
+            name="power_capture.max_stream_rate_hz",
+            expected=10_000_000.0,
+        )
+        if self.stream_fast_fifo is not False:
+            raise ValueError("power_capture.stream_fast_fifo must be exactly false")
+        _require_exact_number(
+            self.stream_arm_settle_s,
+            name="power_capture.stream_arm_settle_s",
+            expected=0.001,
         )
         _require_exact_number(
             self.trigger_delay_s,
@@ -612,6 +629,12 @@ def _result_mapping(value: Any) -> dict[str, Any]:
     return decoded
 
 
+def _require_normal_fifo_readback(scope: Any) -> None:
+    sc = getattr(scope, "sc", None)
+    if sc is None or bool(getattr(sc, "_fast_fifo_read_active", True)):
+        raise RuntimeError("Husky fast FIFO remained active immediately before stream trigger")
+
+
 def _capture_optimizer_with_sidecapture(
     prepared: _PreparedOptimizerCapture,
     *,
@@ -625,21 +648,42 @@ def _capture_optimizer_with_sidecapture(
     class LockedHealthChipWhispererSampler(sc.ChipWhispererSampler):
         """Lock Husky nuisance/clipping controls and expose their readback."""
 
-        def __init__(self, *args: Any, **kwargs: Any) -> None:
+        def __init__(
+            self,
+            *args: Any,
+            stream_fast_fifo: bool,
+            stream_arm_settle_s: float,
+            **kwargs: Any,
+        ) -> None:
             super().__init__(*args, **kwargs)
+            self.stream_fast_fifo = bool(stream_fast_fifo)
+            self.stream_arm_settle_s = float(stream_arm_settle_s)
             self.adc_error_controls: dict[str, Any] | None = None
+            self.streaming_controls: dict[str, Any] | None = None
+            self._slow_fifo_trigger_executed = False
 
         def plan(self) -> Any:
             resolved = super().plan()
+            resolved.details.update(
+                {
+                    "max_stream_rate_hz": self.max_stream_rate_hz,
+                    "stream_segment_size": self.stream_segment_size,
+                    "stream_fast_fifo": self.stream_fast_fifo,
+                    "stream_arm_settle_s": self.stream_arm_settle_s,
+                }
+            )
+            # The c1ef base captured scope_info before the compatibility fields
+            # above were added. Keep the record batch readback identical.
+            self._scope_info = resolved.to_dict()
             resolved_payload = resolved.to_dict()
             expected_plan = {
-                "mode": "burst",
-                "sample_rate_hz": 20_000.0,
-                "samples": 200_000,
-                "duration_s": 10.0,
+                "mode": "stream",
+                "sample_rate_hz": 100_000.0,
+                "samples": 2_000_000,
+                "duration_s": 20.0,
                 "pretrigger_samples": 0,
                 "raw_sample_rate_hz": 150_000_000.0,
-                "decimation": 7_500,
+                "decimation": 1_500,
                 "bits_per_sample": 12,
             }
             for name, expected in expected_plan.items():
@@ -651,6 +695,34 @@ def _capture_optimizer_with_sidecapture(
             adc = getattr(self.scope, "adc", None)
             if adc is None or not hasattr(adc, "lo_gain_errors_disabled"):
                 raise RuntimeError("connected Husky lacks required lo_gain_errors_disabled control")
+            if bool(getattr(adc, "stream_mode", False)) is not True:
+                raise RuntimeError("Husky did not enable true ADC streaming mode")
+            if not hasattr(adc, "stream_segment_size"):
+                raise RuntimeError("connected Husky lacks stream_segment_size readback")
+            segment_readback = int(adc.stream_segment_size)
+            if segment_readback != power.stream_segment_size:
+                raise RuntimeError(
+                    "Husky stream segment-size readback differs from the locked plan: "
+                    f"expected {power.stream_segment_size}, got {segment_readback}"
+                )
+            actual_trigger = getattr(self, "_actual_trigger_mode", None)
+            if (
+                actual_trigger != "force"
+                or resolved_payload.get("details", {}).get("trigger") != "force"
+            ):
+                raise RuntimeError("true streaming capture did not resolve the force trigger")
+            self.streaming_controls = {
+                "requested_mode": "stream",
+                "resolved_mode": str(resolved_payload["mode"]),
+                "adc_stream_mode_readback": True,
+                "max_stream_rate_hz_configured": float(self.max_stream_rate_hz),
+                "stream_segment_size_configured": int(self.stream_segment_size),
+                "stream_segment_size_readback": segment_readback,
+                "stream_fast_fifo_requested": self.stream_fast_fifo,
+                "stream_arm_settle_s_requested": self.stream_arm_settle_s,
+                "requested_trigger_mode": str(self.trigger_mode),
+                "actual_trigger_mode_readback": str(actual_trigger),
+            }
             adc.lo_gain_errors_disabled = True
             low_gain_readback = bool(adc.lo_gain_errors_disabled)
             if low_gain_readback is not True:
@@ -674,9 +746,41 @@ def _capture_optimizer_with_sidecapture(
             }
             return resolved
 
+        def trigger(self) -> Any:
+            if self.resolved is None or self.resolved.mode != "stream":
+                raise RuntimeError("locked capture reached trigger without a stream plan")
+            if self.stream_fast_fifo:
+                raise RuntimeError("locked streaming capture must not use Husky fast FIFO")
+            # Ported from the H100-validated post-c1ef compatibility path:
+            # scope.arm() may re-enter fast FIFO, so disable it again immediately
+            # before the force trigger and give the slow path 1 ms to settle.
+            self._disable_fast_mode()
+            _require_normal_fifo_readback(self.scope)
+            time.sleep(self.stream_arm_settle_s)
+            anchor = super().trigger()
+            if anchor.source != "chipwhisperer.force":
+                raise RuntimeError("slow-FIFO stream did not use the force trigger")
+            self._slow_fifo_trigger_executed = True
+            return anchor
+
+        def finish(self) -> Any:
+            if not self._slow_fifo_trigger_executed:
+                raise RuntimeError("slow-FIFO stream trigger shim was not executed")
+            batch = super().finish()
+            batch.metadata.update(
+                {
+                    "stream_fast_fifo": self.stream_fast_fifo,
+                    "stream_arm_settle_s": self.stream_arm_settle_s,
+                    "normal_fifo_enforced_before_trigger": True,
+                    "slow_fifo_trigger_executed": self._slow_fifo_trigger_executed,
+                }
+            )
+            return batch
+
         def metadata(self) -> dict[str, Any]:
             payload = dict(super().metadata())
             payload["adc_error_controls"] = self.adc_error_controls
+            payload["streaming_controls"] = self.streaming_controls
             return payload
 
     request = sc.CaptureRequest.create(
@@ -695,6 +799,10 @@ def _capture_optimizer_with_sidecapture(
         trigger=power.trigger,
         usb_read_mode=power.usb_read_mode,
         safe_memory_fraction=power.safe_memory_fraction,
+        max_stream_rate_hz=power.max_stream_rate_hz,
+        stream_segment_size=power.stream_segment_size,
+        stream_fast_fifo=power.stream_fast_fifo,
+        stream_arm_settle_s=power.stream_arm_settle_s,
     )
     sampler = primary
     if power.nvml_auxiliary:
@@ -844,10 +952,10 @@ def _validate_trace_record(
     if not isinstance(request, Mapping) or not isinstance(resolved, Mapping):
         raise TypeError("SideCapture manifest lacks request/resolved capture plans")
     expected_request = {
-        "duration_s": 10.0,
-        "sample_rate_hz": 20_000.0,
+        "duration_s": 20.0,
+        "sample_rate_hz": 100_000.0,
         "pretrigger_s": 0.0,
-        "mode": "burst",
+        "mode": "stream",
         "bits_per_sample": 12,
         "gain_db": 10.0,
         "channel": "power",
@@ -856,13 +964,13 @@ def _validate_trace_record(
         if request.get(name) != expected:
             raise RuntimeError(f"SideCapture request {name} is not locked: {request.get(name)!r}")
     expected_resolved = {
-        "mode": "burst",
-        "sample_rate_hz": 20_000.0,
-        "samples": 200_000,
-        "duration_s": 10.0,
+        "mode": "stream",
+        "sample_rate_hz": 100_000.0,
+        "samples": 2_000_000,
+        "duration_s": 20.0,
         "pretrigger_samples": 0,
         "raw_sample_rate_hz": 150_000_000.0,
-        "decimation": 7_500,
+        "decimation": 1_500,
         "bits_per_sample": 12,
     }
     for name, expected in expected_resolved.items():
@@ -913,9 +1021,9 @@ def _validate_trace_record(
         # independent host-clock gate catches a silently wrapped/clamped ADC
         # divider before an apparently healthy but time-compressed trace can
         # be accepted.
-        if nvml_host_span_seconds < 9.5:
+        if nvml_host_span_seconds < 19.5:
             raise RuntimeError(
-                "ChipWhisperer capture completed too early for the locked 10-second plan: "
+                "ChipWhisperer capture completed too early for the locked 20-second stream: "
                 f"host span was {nvml_host_span_seconds:.6f} seconds"
             )
     primary = channels[power.channel]
@@ -927,12 +1035,12 @@ def _validate_trace_record(
     ):
         raise RuntimeError("ChipWhisperer channel must remain explicitly uncalibrated ADC data")
     if (
-        primary.get("shape") != [200_000]
-        or primary.get("sample_rate_hz") != 20_000.0
+        primary.get("shape") != [2_000_000]
+        or primary.get("sample_rate_hz") != 100_000.0
         or primary.get("metadata", {}).get("gain_db") != 10.0
         or primary.get("metadata", {}).get("bits_per_sample") != 12
     ):
-        raise RuntimeError("stored ChipWhisperer channel differs from the locked 10s/20kHz plan")
+        raise RuntimeError("stored ChipWhisperer channel differs from the locked 20s/100kHz stream")
 
     sampler_metadata = disk_record.get("sampler_metadata")
     if not isinstance(sampler_metadata, Mapping):
@@ -963,6 +1071,32 @@ def _validate_trace_record(
         or primary_sampler.get("resolved") != resolved
     ):
         raise RuntimeError("primary sampler metadata differs from the locked Husky plan")
+    streaming_controls = primary_sampler.get("streaming_controls")
+    expected_streaming_controls = {
+        "requested_mode": "stream",
+        "resolved_mode": "stream",
+        "adc_stream_mode_readback": True,
+        "max_stream_rate_hz_configured": 10_000_000.0,
+        "stream_segment_size_configured": 65_536,
+        "stream_segment_size_readback": 65_536,
+        "stream_fast_fifo_requested": False,
+        "stream_arm_settle_s_requested": 0.001,
+        "requested_trigger_mode": "auto",
+        "actual_trigger_mode_readback": "force",
+    }
+    if streaming_controls != expected_streaming_controls:
+        raise RuntimeError("primary sampler lacks exact true-stream hardware readback")
+    details = resolved.get("details")
+    if not isinstance(details, Mapping) or (
+        details.get("trigger") != "force"
+        or details.get("usb_read_mode") != "auto"
+        or details.get("gain_db") != 10.0
+        or details.get("max_stream_rate_hz") != 10_000_000.0
+        or details.get("stream_segment_size") != 65_536
+        or details.get("stream_fast_fifo") is not False
+        or details.get("stream_arm_settle_s") != 0.001
+    ):
+        raise RuntimeError("resolved stream trigger/USB/gain details are invalid")
     error_controls = primary_sampler.get("adc_error_controls")
     if not isinstance(error_controls, Mapping) or (
         error_controls.get("lo_gain_errors_disabled_readback") is not True
@@ -973,6 +1107,26 @@ def _validate_trace_record(
         error_controls.get("clip_errors_disabled_readback") is not False
     ):
         raise RuntimeError("Husky hardware clipping errors were disabled")
+
+    trigger = disk_record.get("trigger")
+    if not isinstance(trigger, Mapping) or (
+        trigger.get("source") != "chipwhisperer.force"
+        or trigger.get("metadata", {}).get("mode") != "force"
+    ):
+        raise RuntimeError("record does not prove the force-triggered streaming path")
+    batch_metadata = disk_record.get("batch_metadata")
+    primary_batch = None
+    if isinstance(batch_metadata, Mapping):
+        primary_batch = batch_metadata.get("primary") if power.nvml_auxiliary else batch_metadata
+    if not isinstance(primary_batch, Mapping) or (
+        primary_batch.get("adc_errors") != 0
+        or primary_batch.get("scope_info") != resolved
+        or primary_batch.get("stream_fast_fifo") is not False
+        or primary_batch.get("stream_arm_settle_s") != 0.001
+        or primary_batch.get("normal_fifo_enforced_before_trigger") is not True
+        or primary_batch.get("slow_fifo_trigger_executed") is not True
+    ):
+        raise RuntimeError("record batch metadata does not prove a healthy stream readback")
 
     manifest_sampler = experiment.get("sampler")
     if manifest_sampler != sampler_metadata:

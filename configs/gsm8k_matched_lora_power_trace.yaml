@@ -89,11 +89,12 @@ forward:
   scoring_micro_batch_size: 16
 
 power_capture:
-  # 150 MHz / 7,500 = 20 kHz. The 7,500 divider avoids the high-divider wrap,
-  # and 200,000 samples stay within SideCapture's 213,088-sample safe budget.
-  duration: 10s
-  sample_rate: 20kHz
-  mode: burst
+  # Explicit slow-FIFO streaming at the H100-validated divider. The 2,000,000
+  # samples intentionally exceed burst memory; auto/burst fallback and the
+  # corrupt Husky fast-FIFO path are both rejected by the capture validator.
+  duration: 20s
+  sample_rate: 100kHz
+  mode: stream
   bits_per_sample: 12
   gain_db: 10.0
   channel: power
@@ -101,6 +102,10 @@ power_capture:
   product_id: 44262
   clock_hz: 150000000.0
   safe_memory_fraction: 0.65
+  max_stream_rate_hz: 10000000.0
+  stream_segment_size: 65536
+  stream_fast_fifo: false
+  stream_arm_settle_s: 0.001
   trigger: auto
   usb_read_mode: auto
   trigger_delay_s: 1.0

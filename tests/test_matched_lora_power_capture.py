@@ -27,6 +27,7 @@ from rl_no_backward.matched_lora_power_capture import (
     _capture_optimizer_with_sidecapture,
     _load_sidecapture_api,
     _PreparedOptimizerCapture,
+    _require_normal_fifo_readback,
     _result_mapping,
     _safe_relative_file,
     _trace_file_receipts,
@@ -47,10 +48,10 @@ def _write_json(path: Path, value: object) -> None:
 
 def _request() -> dict[str, object]:
     return {
-        "duration_s": 10.0,
-        "sample_rate_hz": 20_000.0,
+        "duration_s": 20.0,
+        "sample_rate_hz": 100_000.0,
         "pretrigger_s": 0.0,
-        "mode": "burst",
+        "mode": "stream",
         "bits_per_sample": 12,
         "gain_db": 10.0,
         "channel": "power",
@@ -59,16 +60,26 @@ def _request() -> dict[str, object]:
 
 def _resolved() -> dict[str, object]:
     return {
-        "mode": "burst",
-        "sample_rate_hz": 20_000.0,
-        "samples": 200_000,
-        "duration_s": 10.0,
+        "mode": "stream",
+        "sample_rate_hz": 100_000.0,
+        "samples": 2_000_000,
+        "duration_s": 20.0,
         "pretrigger_samples": 0,
         "raw_sample_rate_hz": 150_000_000.0,
-        "decimation": 7_500,
+        "decimation": 1_500,
         "bits_per_sample": 12,
         "warnings": [],
-        "details": {},
+        "details": {
+            "max_samples_hw": 327_828,
+            "max_samples_safe": 213_088,
+            "trigger": "force",
+            "usb_read_mode": "auto",
+            "gain_db": 10.0,
+            "max_stream_rate_hz": 10_000_000.0,
+            "stream_segment_size": 65_536,
+            "stream_fast_fifo": False,
+            "stream_arm_settle_s": 0.001,
+        },
     }
 
 
@@ -83,6 +94,18 @@ def _sampler_metadata(*, nvml: bool = True) -> dict[str, object]:
         "usb_read_mode": "auto",
         "safe_memory_fraction": 0.65,
         "resolved": _resolved(),
+        "streaming_controls": {
+            "requested_mode": "stream",
+            "resolved_mode": "stream",
+            "adc_stream_mode_readback": True,
+            "max_stream_rate_hz_configured": 10_000_000.0,
+            "stream_segment_size_configured": 65_536,
+            "stream_segment_size_readback": 65_536,
+            "stream_fast_fifo_requested": False,
+            "stream_arm_settle_s_requested": 0.001,
+            "requested_trigger_mode": "auto",
+            "actual_trigger_mode_readback": "force",
+        },
         "adc_error_controls": {
             "lo_gain_errors_disabled_required": True,
             "lo_gain_errors_disabled_readback": True,
@@ -128,7 +151,7 @@ def _make_trace(root: Path, method: str = "bp_grpo") -> dict[str, object]:
     timestamp_path.parent.mkdir(parents=True)
     np.save(
         timestamp_path,
-        np.asarray([1_000_000_000, 6_000_000_000, 11_000_000_000], dtype=np.int64),
+        np.asarray([1_000_000_000, 11_000_000_000, 21_000_000_000], dtype=np.int64),
         allow_pickle=False,
     )
     nvml_power_path = root / "channels/nvml.power_w/shard_000000/capture_000000000.npy"
@@ -171,8 +194,8 @@ def _make_trace(root: Path, method: str = "bp_grpo") -> dict[str, object]:
             "power": {
                 "path": power_path.relative_to(root).as_posix(),
                 "dtype": "float32",
-                "shape": [200_000],
-                "sample_rate_hz": 20_000.0,
+                "shape": [2_000_000],
+                "sample_rate_hz": 100_000.0,
                 "unit": "normalized_adc",
                 "metadata": {
                     "calibrated": False,
@@ -203,6 +226,22 @@ def _make_trace(root: Path, method: str = "bp_grpo") -> dict[str, object]:
             for name in ("matched_candidate", "optimizer_result")
         },
         "sampler_metadata": sampler,
+        "trigger": {
+            "host_monotonic_ns": 1_000_000_000,
+            "source": "chipwhisperer.force",
+            "metadata": {"mode": "force"},
+        },
+        "batch_metadata": {
+            "primary": {
+                "adc_errors": 0,
+                "scope_info": _resolved(),
+                "stream_fast_fifo": False,
+                "stream_arm_settle_s": 0.001,
+                "normal_fifo_enforced_before_trigger": True,
+                "slow_fifo_trigger_executed": True,
+            },
+            "auxiliaries": {"NVMLSampler": {"rows": 3}},
+        },
     }
     _write_json(root / "records/shard_000000/capture_000000000.json", record)
     return record
@@ -255,13 +294,17 @@ def test_locked_config_is_exact_and_has_no_eval_or_wandb() -> None:
     assert matched.wandb_mode == "disabled"
     assert matched.run_test_evaluation is False
     assert matched.test_size == 0
-    assert power.duration == "10s"
-    assert power.sample_rate == "20kHz"
-    assert power.mode == "burst"
+    assert power.duration == "20s"
+    assert power.sample_rate == "100kHz"
+    assert power.mode == "stream"
     assert power.serial_number == CHIPWHISPERER_SERIAL
     assert power.product_id == 0xACE6
     assert power.clock_hz == 150_000_000.0
     assert power.safe_memory_fraction == 0.65
+    assert power.max_stream_rate_hz == 10_000_000.0
+    assert power.stream_segment_size == 65_536
+    assert power.stream_fast_fifo is False
+    assert power.stream_arm_settle_s == 0.001
     assert power.capture_count == power.max_attempts == 1
     assert power.trigger_delay_s == 1.0
     assert power.nvml_auxiliary is True
@@ -273,15 +316,19 @@ def test_locked_config_is_exact_and_has_no_eval_or_wandb() -> None:
 @pytest.mark.parametrize(
     ("field", "value"),
     [
-        ("duration", "11s"),
-        ("sample_rate", "10kHz"),
-        ("mode", "stream"),
+        ("duration", "30s"),
+        ("sample_rate", "20kHz"),
+        ("mode", "burst"),
         ("max_attempts", 2),
         ("capture_count", 2),
         ("serial_number", "wrong"),
         ("product_id", 1),
         ("clock_hz", 1.0),
         ("safe_memory_fraction", 1.0),
+        ("max_stream_rate_hz", 20_000_000.0),
+        ("stream_segment_size", 32_768),
+        ("stream_fast_fifo", True),
+        ("stream_arm_settle_s", 0.0),
         ("cuda_annotation_sync", "none"),
         ("sidecapture_commit", "wrong"),
         ("chipwhisperer_commit", "wrong"),
@@ -340,11 +387,22 @@ def test_optimizer_result_must_be_json_finite() -> None:
         _result_mapping(Result(0, float("nan")))
 
 
+def test_normal_fifo_readback_fails_closed() -> None:
+    _require_normal_fifo_readback(SimpleNamespace(sc=SimpleNamespace(_fast_fifo_read_active=False)))
+    with pytest.raises(RuntimeError, match="fast FIFO remained active"):
+        _require_normal_fifo_readback(
+            SimpleNamespace(sc=SimpleNamespace(_fast_fifo_read_active=True))
+        )
+    with pytest.raises(RuntimeError, match="fast FIFO remained active"):
+        _require_normal_fifo_readback(SimpleNamespace(sc=SimpleNamespace()))
+
+
 def test_one_shot_capture_uses_locked_husky_controls_and_annotations(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     state: dict[str, object] = {}
+    sequence: list[str] = []
 
     class FakeRequest:
         @classmethod
@@ -356,19 +414,42 @@ def test_one_shot_capture_uses_locked_husky_controls_and_annotations(
         def __init__(self, request: object, **kwargs: object) -> None:
             self.request = request
             self.kwargs = kwargs
+            self.max_stream_rate_hz = kwargs["max_stream_rate_hz"]
+            self.stream_segment_size = kwargs["stream_segment_size"]
+            self.trigger_mode = kwargs["trigger"]
+            self._actual_trigger_mode = "force"
+            self.resolved = None
             self.scope = SimpleNamespace(
                 adc=SimpleNamespace(
                     lo_gain_errors_disabled=False,
                     clip_errors_disabled=True,
-                )
+                    stream_mode=True,
+                    stream_segment_size=65_536,
+                ),
+                sc=SimpleNamespace(_fast_fifo_read_active=True),
             )
 
         def plan(self) -> object:
             class Resolved:
-                def to_dict(self) -> dict[str, object]:
-                    return _resolved()
+                mode = "stream"
 
-            return Resolved()
+                def __init__(self) -> None:
+                    self.details = dict(_resolved()["details"])
+
+                def to_dict(self) -> dict[str, object]:
+                    payload = _resolved()
+                    payload["details"] = dict(self.details)
+                    return payload
+
+            self.resolved = Resolved()
+            return self.resolved
+
+        def _disable_fast_mode(self) -> None:
+            state["normal_fifo_disable_calls"] = int(state.get("normal_fifo_disable_calls", 0)) + 1
+            self.scope.sc._fast_fifo_read_active = False
+
+        def trigger(self) -> object:
+            return SimpleNamespace(source="chipwhisperer.force")
 
         def metadata(self) -> dict[str, object]:
             return {"backend": "chipwhisperer", **self.kwargs}
@@ -401,6 +482,7 @@ def test_one_shot_capture_uses_locked_husky_controls_and_annotations(
         def mark(self, name: str, **metadata: object) -> None:
             del metadata
             self.annotations.append((name, "host", None))
+            sequence.append(name)
 
         @contextmanager
         def region(self, name: str, **metadata: object):
@@ -434,6 +516,8 @@ def test_one_shot_capture_uses_locked_husky_controls_and_annotations(
 
         def run(self, count: int, *, labels: dict[str, object]):
             state["run"] = {"count": count, "labels": labels}
+            primary = getattr(self.sampler, "primary", self.sampler)
+            primary.trigger()
             context = FakeContext()
             self.workload.run(context)
             state["context"] = context
@@ -460,7 +544,10 @@ def test_one_shot_capture_uses_locked_husky_controls_and_annotations(
         },
         lora_digest=lambda: "lora",
         frozen_base_digest=lambda: "base",
-        validate_after=lambda result: validations.append(dict(result)),
+        validate_after=lambda result: (
+            sequence.append("validate_after"),
+            validations.append(dict(result)),
+        ),
         provenance={"candidate_digest": "candidate"},
         runtime={},
     )
@@ -473,9 +560,9 @@ def test_one_shot_capture_uses_locked_husky_controls_and_annotations(
     assert result["backward_calls"] == 0
     assert len(validations) == 1
     assert state["request"] == {
-        "duration": "10s",
-        "sample_rate": "20kHz",
-        "mode": "burst",
+        "duration": "20s",
+        "sample_rate": "100kHz",
+        "mode": "stream",
         "bits_per_sample": 12,
         "gain_db": 10.0,
         "channel": "power",
@@ -497,6 +584,20 @@ def test_one_shot_capture_uses_locked_husky_controls_and_annotations(
     controls = primary["adc_error_controls"]  # type: ignore[index]
     assert controls["lo_gain_errors_disabled_readback"] is True
     assert controls["clip_errors_disabled_readback"] is False
+    streaming = primary["streaming_controls"]  # type: ignore[index]
+    assert streaming == {
+        "requested_mode": "stream",
+        "resolved_mode": "stream",
+        "adc_stream_mode_readback": True,
+        "max_stream_rate_hz_configured": 10_000_000.0,
+        "stream_segment_size_configured": 65_536,
+        "stream_segment_size_readback": 65_536,
+        "stream_fast_fifo_requested": False,
+        "stream_arm_settle_s_requested": 0.001,
+        "requested_trigger_mode": "auto",
+        "actual_trigger_mode_readback": "force",
+    }
+    assert state["normal_fifo_disable_calls"] == 1
     context = state["context"]
     assert context.annotations == [
         ("fo_npg.optimizer.ready", "host", None),
@@ -505,6 +606,7 @@ def test_one_shot_capture_uses_locked_husky_controls_and_annotations(
         ("fo_npg.optimizer.complete", "host", None),
     ]
     assert set(context.artifacts) == {"matched_candidate", "optimizer_result"}
+    assert sequence.index("fo_npg.optimizer.complete") < sequence.index("validate_after")
 
 
 def test_trace_validator_binds_exact_hardware_plan_and_method_markers(tmp_path: Path) -> None:
@@ -515,17 +617,40 @@ def test_trace_validator_binds_exact_hardware_plan_and_method_markers(tmp_path: 
         method="bp_grpo",
         power=PowerCaptureConfig(),
     )
-    assert receipt["resolved_capture"]["samples"] == 200_000
-    assert receipt["nvml_capture_host_span_seconds"] == pytest.approx(10.0)
+    assert receipt["resolved_capture"]["mode"] == "stream"
+    assert receipt["resolved_capture"]["samples"] == 2_000_000
+    assert receipt["nvml_capture_host_span_seconds"] == pytest.approx(20.0)
     assert receipt["primary_channel"]["unit"] == "normalized_adc"
     assert receipt["annotation_count"] == 4
+
+
+def test_trace_validator_supports_chipwhisperer_without_nvml_auxiliary(
+    tmp_path: Path,
+) -> None:
+    record = _make_trace(tmp_path, "fo_npg")
+    record["channels"].pop("nvml.power_w")  # type: ignore[union-attr]
+    record["sampler_metadata"] = record["sampler_metadata"]["primary"]  # type: ignore[index]
+    record["batch_metadata"] = record["batch_metadata"]["primary"]  # type: ignore[index]
+    _write_json(tmp_path / "records/shard_000000/capture_000000000.json", record)
+    manifest = json.loads((tmp_path / "manifest.json").read_text())
+    manifest["experiment"]["sampler"] = record["sampler_metadata"]
+    _write_json(tmp_path / "manifest.json", manifest)
+
+    receipt = _validate_trace_record(
+        tmp_path,
+        record,
+        method="fo_npg",
+        power=PowerCaptureConfig(nvml_auxiliary=False),
+    )
+
+    assert receipt["nvml_capture_host_span_seconds"] is None
 
 
 @pytest.mark.parametrize(
     ("target", "field", "value", "message"),
     [
-        ("manifest", "sample_rate_hz", 4_999.0, "request sample_rate_hz"),
-        ("resolved", "decimation", 7_499, "resolved plan decimation"),
+        ("manifest", "sample_rate_hz", 99_999.0, "request sample_rate_hz"),
+        ("resolved", "decimation", 1_499, "resolved plan decimation"),
         ("sampler", "product_id", "0x1234", "primary sampler metadata"),
     ],
 )

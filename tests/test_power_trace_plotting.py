@@ -43,9 +43,9 @@ def _write_sidecapture_store(
     nvml_pre_seconds: float = 1.1,
 ) -> tuple[np.ndarray, int, int]:
     root.mkdir(parents=True)
-    rate = 1_000.0
+    rate = 100_000.0
     values = (
-        np.sin(np.linspace(0.0, 90.0, 3_000, dtype=np.float64))
+        np.sin(np.linspace(0.0, 600.0, 2_000_000, dtype=np.float64))
         * (0.25 if method == "bp_grpo" else 0.40)
     ).astype(np.float32)
     primary = _write_array(
@@ -95,7 +95,10 @@ def _write_sidecapture_store(
             "end_sample": end_sample,
             "sync": "none",
             "metadata": {},
-            "mapping": {"method": "host_monotonic_trigger_delta"},
+            "mapping": {
+                "method": "host_monotonic_trigger_delta",
+                "trigger_source": "chipwhisperer.force",
+            },
         },
         {
             "name": f"{method}.optimizer.cuda",
@@ -105,13 +108,56 @@ def _write_sidecapture_store(
             "end": (host_end_ns - host_start_ns) / 1e6,
             "start_sample": start_sample + 1,
             "end_sample": end_sample - 1,
-            "sync": "none",
+            "sync": "both",
             "metadata": {},
-            "mapping": {"method": "host_trigger_plus_cuda_origin_enqueue_plus_cuda_elapsed"},
+            "mapping": {
+                "method": "host_trigger_plus_cuda_origin_enqueue_plus_cuda_elapsed",
+                "trigger_source": "chipwhisperer.force",
+            },
         },
     ]
     annotation_path = "annotations/shard_000000/capture_000000000.json"
     _write_json(root / annotation_path, annotations)
+    resolved = {
+        "mode": "stream",
+        "sample_rate_hz": rate,
+        "samples": values.size,
+        "duration_s": values.size / rate,
+        "pretrigger_samples": 0,
+        "raw_sample_rate_hz": 150_000_000.0,
+        "decimation": 1_500,
+        "bits_per_sample": 12,
+        "warnings": [],
+        "details": {
+            "trigger": "force",
+            "usb_read_mode": "auto",
+            "gain_db": 10.0,
+            "max_stream_rate_hz": 10_000_000.0,
+            "stream_segment_size": 65_536,
+            "stream_fast_fifo": False,
+            "stream_arm_settle_s": 0.001,
+        },
+    }
+    sampler_metadata = {
+        "backend": "composite",
+        "primary": {
+            "backend": "chipwhisperer",
+            "resolved": resolved,
+            "streaming_controls": {
+                "requested_mode": "stream",
+                "resolved_mode": "stream",
+                "adc_stream_mode_readback": True,
+                "max_stream_rate_hz_configured": 10_000_000.0,
+                "stream_segment_size_configured": 65_536,
+                "stream_segment_size_readback": 65_536,
+                "stream_fast_fifo_requested": False,
+                "stream_arm_settle_s_requested": 0.001,
+                "requested_trigger_mode": "auto",
+                "actual_trigger_mode_readback": "force",
+            },
+        },
+        "auxiliaries": ([{"backend": "nvml"}] if nvml_power_w is not None else []),
+    }
     record = {
         "schema_version": "sidecapture.dataset/v1",
         "index": 0,
@@ -121,14 +167,42 @@ def _write_sidecapture_store(
         "annotations": {"path": annotation_path, "count": len(annotations)},
         "labels": {"method": method, "seed": 0, "step": 1},
         "health": {"ok": True, "issues": [], "metrics": {}},
-        "trigger": {"host_monotonic_ns": 0, "source": "chipwhisperer"},
+        "trigger": {
+            "host_monotonic_ns": 0,
+            "source": "chipwhisperer.force",
+            "metadata": {"mode": "force"},
+        },
+        "batch_metadata": {
+            "primary": {
+                "adc_errors": 0,
+                "scope_info": resolved,
+                "stream_fast_fifo": False,
+                "stream_arm_settle_s": 0.001,
+                "normal_fifo_enforced_before_trigger": True,
+                "slow_fifo_trigger_executed": True,
+            },
+            "auxiliaries": {},
+        },
+        "sampler_metadata": sampler_metadata,
     }
     _write_json(root / "records/shard_000000/capture_000000000.json", record)
     _write_json(
         root / "manifest.json",
         {
             "schema_version": "sidecapture.dataset/v1",
-            "experiment": {"method": method},
+            "experiment": {
+                "request": {
+                    "duration_s": values.size / rate,
+                    "sample_rate_hz": rate,
+                    "pretrigger_s": 0.0,
+                    "mode": "stream",
+                    "bits_per_sample": 12,
+                    "gain_db": 10.0,
+                    "channel": "power",
+                },
+                "resolved": resolved,
+                "sampler": sampler_metadata,
+            },
             "identity_hash": method,
         },
     )
@@ -139,15 +213,15 @@ def test_loads_exact_host_crop_and_computes_cw_and_nvml_metrics(tmp_path: Path) 
     bp_expected, _, _ = _write_sidecapture_store(
         tmp_path / "bp",
         method="bp_grpo",
-        start_sample=1_000,
-        end_sample=1_300,
+        start_sample=100_000,
+        end_sample=130_000,
         nvml_power_w=100.0,
     )
     _write_sidecapture_store(
         tmp_path / "fo",
         method="fo_npg",
-        start_sample=1_000,
-        end_sample=1_600,
+        start_sample=100_000,
+        end_sample=160_000,
         nvml_power_w=200.0,
     )
 
@@ -156,7 +230,7 @@ def test_loads_exact_host_crop_and_computes_cw_and_nvml_metrics(tmp_path: Path) 
 
     assert np.array_equal(bp.adc_values, bp_expected)
     assert bp.adc_baseline_values is not None
-    assert bp.adc_baseline_values.size == 1_000
+    assert bp.adc_baseline_values.size == 100_000
     assert bp.adc_baseline_duration_seconds == pytest.approx(1.0)
     assert bp.host_duration_seconds == pytest.approx(0.3)
     assert fo.host_duration_seconds == pytest.approx(0.6)
@@ -185,15 +259,15 @@ def test_plot_writes_honest_n1_png_pdf_and_csv(tmp_path: Path) -> None:
     _write_sidecapture_store(
         tmp_path / "bp",
         method="bp_grpo",
-        start_sample=1_000,
-        end_sample=1_300,
+        start_sample=100_000,
+        end_sample=130_000,
         nvml_power_w=100.0,
     )
     _write_sidecapture_store(
         tmp_path / "fo",
         method="fo_npg",
-        start_sample=1_000,
-        end_sample=1_600,
+        start_sample=100_000,
+        end_sample=160_000,
         nvml_power_w=200.0,
     )
 
@@ -211,6 +285,7 @@ def test_plot_writes_honest_n1_png_pdf_and_csv(tmp_path: Path) -> None:
     assert summary.filter(regex="(?i)ci|confidence").empty
     assert set(summary["uncertainty_status"]) == {"single_capture_no_interval"}
     assert set(summary["cw_unit"]) == {"normalized_adc"}
+    assert set(summary["cw_capture_mode"]) == {"stream"}
     assert summary["cw_preoptimizer_baseline_available"].all()
     assert set(summary["cw_raw_summary_scope"]) == {
         "exact host optimizer interval; raw normalized_adc"
@@ -221,15 +296,15 @@ def test_pair_without_nvml_reports_no_absolute_power_or_energy(tmp_path: Path) -
     _write_sidecapture_store(
         tmp_path / "bp",
         method="bp_grpo",
-        start_sample=1_000,
-        end_sample=1_300,
+        start_sample=100_000,
+        end_sample=130_000,
         nvml_power_w=None,
     )
     _write_sidecapture_store(
         tmp_path / "fo",
         method="fo_npg",
-        start_sample=1_000,
-        end_sample=1_600,
+        start_sample=100_000,
+        end_sample=160_000,
         nvml_power_w=None,
     )
 
@@ -242,13 +317,13 @@ def test_pair_without_nvml_reports_no_absolute_power_or_energy(tmp_path: Path) -
 
 def test_nvml_baseline_is_optional_and_never_extrapolated(tmp_path: Path) -> None:
     for method, end_sample, watts in (
-        ("bp_grpo", 1_300, 100.0),
-        ("fo_npg", 1_600, 200.0),
+        ("bp_grpo", 130_000, 100.0),
+        ("fo_npg", 160_000, 200.0),
     ):
         _write_sidecapture_store(
             tmp_path / method,
             method=method,
-            start_sample=1_000,
+            start_sample=100_000,
             end_sample=end_sample,
             nvml_power_w=watts,
             nvml_pre_seconds=0.1,
@@ -269,15 +344,15 @@ def test_fail_closed_on_wrong_schema_annotation_or_asymmetric_nvml(tmp_path: Pat
     _write_sidecapture_store(
         tmp_path / "bp",
         method="bp_grpo",
-        start_sample=1_000,
-        end_sample=1_300,
+        start_sample=100_000,
+        end_sample=130_000,
         nvml_power_w=100.0,
     )
     _write_sidecapture_store(
         tmp_path / "fo",
         method="fo_npg",
-        start_sample=1_000,
-        end_sample=1_600,
+        start_sample=100_000,
+        end_sample=160_000,
         nvml_power_w=None,
     )
     with pytest.raises(ValueError, match="present for both captures or neither"):
@@ -291,6 +366,12 @@ def test_fail_closed_on_wrong_schema_annotation_or_asymmetric_nvml(tmp_path: Pat
         load_sidecapture_optimizer_trace(tmp_path / "bp", expected_method="bp_grpo")
 
     manifest["schema_version"] = "sidecapture.dataset/v1"
+    manifest["experiment"]["request"]["mode"] = "burst"
+    _write_json(manifest_path, manifest)
+    with pytest.raises(ValueError, match="locked 20 s/100 kHz stream plan"):
+        load_sidecapture_optimizer_trace(tmp_path / "bp", expected_method="bp_grpo")
+
+    manifest["experiment"]["request"]["mode"] = "stream"
     _write_json(manifest_path, manifest)
     annotation_path = tmp_path / "bp" / "annotations/shard_000000/capture_000000000.json"
     annotations = json.loads(annotation_path.read_text())
@@ -304,15 +385,15 @@ def test_cli_accepts_exact_two_stores(tmp_path: Path) -> None:
     _write_sidecapture_store(
         tmp_path / "bp",
         method="bp_grpo",
-        start_sample=1_000,
-        end_sample=1_300,
+        start_sample=100_000,
+        end_sample=130_000,
         nvml_power_w=None,
     )
     _write_sidecapture_store(
         tmp_path / "fo",
         method="fo_npg",
-        start_sample=1_000,
-        end_sample=1_600,
+        start_sample=100_000,
+        end_sample=160_000,
         nvml_power_w=None,
     )
 

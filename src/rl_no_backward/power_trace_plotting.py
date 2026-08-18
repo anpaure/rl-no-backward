@@ -33,6 +33,37 @@ METHOD_COLOURS = {"bp_grpo": "#D55E00", "fo_npg": "#009E73"}
 UNCERTAINTY_STATUS = "single_capture_no_interval"
 SLIDING_RMS_WINDOW_SECONDS = 0.050
 PRE_OPTIMIZER_BASELINE_SECONDS = 1.0
+EXPECTED_STREAM_REQUEST = {
+    "duration_s": 20.0,
+    "sample_rate_hz": 100_000.0,
+    "pretrigger_s": 0.0,
+    "mode": "stream",
+    "bits_per_sample": 12,
+    "gain_db": 10.0,
+    "channel": "power",
+}
+EXPECTED_STREAM_RESOLVED = {
+    "mode": "stream",
+    "sample_rate_hz": 100_000.0,
+    "samples": 2_000_000,
+    "duration_s": 20.0,
+    "pretrigger_samples": 0,
+    "raw_sample_rate_hz": 150_000_000.0,
+    "decimation": 1_500,
+    "bits_per_sample": 12,
+}
+EXPECTED_STREAMING_CONTROLS = {
+    "requested_mode": "stream",
+    "resolved_mode": "stream",
+    "adc_stream_mode_readback": True,
+    "max_stream_rate_hz_configured": 10_000_000.0,
+    "stream_segment_size_configured": 65_536,
+    "stream_segment_size_readback": 65_536,
+    "stream_fast_fifo_requested": False,
+    "stream_arm_settle_s_requested": 0.001,
+    "requested_trigger_mode": "auto",
+    "actual_trigger_mode_readback": "force",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,6 +82,7 @@ class NVMLSummary:
 class OptimizerPowerTrace:
     method: str
     store: Path
+    capture_mode: str
     adc_values: np.ndarray
     adc_baseline_values: np.ndarray | None
     adc_sample_rate_hz: float
@@ -128,6 +160,7 @@ class OptimizerPowerTrace:
             "optimizer_adc_duration_seconds": self.adc_duration_seconds,
             "cw_sample_count": int(self.adc_values.size),
             "cw_sample_rate_hz": self.adc_sample_rate_hz,
+            "cw_capture_mode": self.capture_mode,
             "cw_unit": "normalized_adc",
             "cw_raw_summary_scope": "exact host optimizer interval; raw normalized_adc",
             "cw_rms": float(np.sqrt(np.mean(np.square(self.adc_values, dtype=np.float64)))),
@@ -249,6 +282,100 @@ def _exact_annotation(
     return annotation
 
 
+def _validate_stream_capture_contract(
+    manifest: Mapping[str, Any], record: Mapping[str, Any]
+) -> Mapping[str, Any]:
+    """Bind the stored channel to SideCapture's resolved streaming plan.
+
+    SideCapture v1 materializes both burst and streaming acquisitions as one
+    contiguous NumPy channel.  The array layout therefore does not identify
+    the acquisition mode; the request, resolved plan, and hardware readback do.
+    """
+
+    experiment = manifest.get("experiment")
+    if not isinstance(experiment, Mapping):
+        raise TypeError("SideCapture manifest lacks experiment metadata")
+    request = experiment.get("request")
+    resolved = experiment.get("resolved")
+    if not isinstance(request, Mapping) or not isinstance(resolved, Mapping):
+        raise TypeError("SideCapture manifest lacks request/resolved capture plans")
+    if any(request.get(name) != expected for name, expected in EXPECTED_STREAM_REQUEST.items()):
+        raise ValueError("SideCapture request differs from the locked 20 s/100 kHz stream plan")
+    if any(resolved.get(name) != expected for name, expected in EXPECTED_STREAM_RESOLVED.items()):
+        raise ValueError(
+            "SideCapture resolved plan differs from the locked 20 s/100 kHz stream plan"
+        )
+    resolved_details = resolved.get("details")
+    if not isinstance(resolved_details, Mapping) or (
+        resolved_details.get("trigger") != "force"
+        or resolved_details.get("usb_read_mode") != "auto"
+        or resolved_details.get("gain_db") != 10.0
+        or resolved_details.get("max_stream_rate_hz") != 10_000_000.0
+        or resolved_details.get("stream_segment_size") != 65_536
+        or resolved_details.get("stream_fast_fifo") is not False
+        or resolved_details.get("stream_arm_settle_s") != 0.001
+    ):
+        raise ValueError("resolved stream plan lacks the locked force-trigger/readout details")
+
+    sampler_metadata = record.get("sampler_metadata")
+    if not isinstance(sampler_metadata, Mapping):
+        raise TypeError("SideCapture record lacks sampler metadata")
+    if experiment.get("sampler") != sampler_metadata:
+        raise ValueError("manifest and record sampler metadata differ")
+    if sampler_metadata.get("backend") == "composite":
+        primary_sampler = sampler_metadata.get("primary")
+    else:
+        primary_sampler = sampler_metadata
+    if not isinstance(primary_sampler, Mapping):
+        raise TypeError("SideCapture record lacks primary sampler metadata")
+    if (
+        primary_sampler.get("backend") != "chipwhisperer"
+        or primary_sampler.get("resolved") != resolved
+    ):
+        raise ValueError("primary ChipWhisperer metadata differs from the resolved stream plan")
+    streaming_controls = primary_sampler.get("streaming_controls")
+    if not isinstance(streaming_controls, Mapping):
+        raise TypeError("primary ChipWhisperer metadata lacks streaming-control readback")
+    if any(
+        streaming_controls.get(name) != expected
+        for name, expected in EXPECTED_STREAMING_CONTROLS.items()
+    ):
+        raise ValueError("primary sampler lacks a valid true-stream hardware readback")
+    if set(streaming_controls) != set(EXPECTED_STREAMING_CONTROLS):
+        raise ValueError("primary sampler has unexpected streaming-control readback")
+
+    batch_metadata = record.get("batch_metadata")
+    if isinstance(batch_metadata, Mapping) and sampler_metadata.get("backend") == "composite":
+        primary_batch_metadata = batch_metadata.get("primary")
+    else:
+        primary_batch_metadata = batch_metadata
+    scope_info = (
+        primary_batch_metadata.get("scope_info")
+        if isinstance(primary_batch_metadata, Mapping)
+        else None
+    )
+    if scope_info != resolved:
+        raise ValueError("record scope readback differs from the resolved stream plan")
+    if (
+        primary_batch_metadata.get("adc_errors") != 0
+        or primary_batch_metadata.get("stream_fast_fifo") is not False
+        or primary_batch_metadata.get("stream_arm_settle_s") != 0.001
+        or primary_batch_metadata.get("normal_fifo_enforced_before_trigger") is not True
+        or primary_batch_metadata.get("slow_fifo_trigger_executed") is not True
+    ):
+        raise ValueError("record batch metadata lacks the locked slow-FIFO stream proof")
+    trigger = record.get("trigger")
+    trigger_metadata = trigger.get("metadata") if isinstance(trigger, Mapping) else None
+    if (
+        not isinstance(trigger, Mapping)
+        or trigger.get("source") != "chipwhisperer.force"
+        or not isinstance(trigger_metadata, Mapping)
+        or trigger_metadata.get("mode") != "force"
+    ):
+        raise ValueError("stream capture must record the ChipWhisperer force-trigger readback")
+    return resolved
+
+
 def _load_nvml_summary(
     root: Path,
     descriptor: Mapping[str, Any],
@@ -337,12 +464,14 @@ def load_sidecapture_optimizer_trace(
             f"SideCapture store must contain exactly one committed record; found {len(record_paths)}"
         )
     record = _read_mapping(record_paths[0], description="SideCapture record")
+    resolved_capture = _validate_stream_capture_contract(manifest, record)
     labels = record.get("labels")
     health = record.get("health")
     channels = record.get("channels")
     if (
         record.get("schema_version") != SIDECAPTURE_SCHEMA
         or record.get("index") != 0
+        or record.get("attempt") != 1
         or not isinstance(labels, Mapping)
         or labels.get("method") != expected_method
         or not isinstance(health, Mapping)
@@ -354,6 +483,10 @@ def load_sidecapture_optimizer_trace(
     primary = channels.get(primary_name)
     if not isinstance(primary_name, str) or not isinstance(primary, Mapping):
         raise TypeError("SideCapture record has no primary channel")
+    if primary.get("shape") != [resolved_capture.get("samples")] or primary.get(
+        "sample_rate_hz"
+    ) != resolved_capture.get("sample_rate_hz"):
+        raise ValueError("stored primary channel differs from the resolved stream plan")
     sample_rate = primary.get("sample_rate_hz")
     primary_metadata = primary.get("metadata")
     if (
@@ -388,6 +521,7 @@ def load_sidecapture_optimizer_trace(
     if (
         not isinstance(mapping, Mapping)
         or mapping.get("method") != "host_monotonic_trigger_delta"
+        or mapping.get("trigger_source") != "chipwhisperer.force"
         or isinstance(start_ns, bool)
         or not isinstance(start_ns, int)
         or isinstance(end_ns, bool)
@@ -400,9 +534,14 @@ def load_sidecapture_optimizer_trace(
         or not 0 <= start_sample < end_sample <= full_adc.size
     ):
         raise ValueError("host optimizer annotation has invalid time/sample bounds or mapping")
+    cuda_mapping = cuda.get("mapping")
     cuda_start, cuda_end = cuda.get("start_sample"), cuda.get("end_sample")
     if (
-        isinstance(cuda_start, bool)
+        cuda.get("sync") != "both"
+        or not isinstance(cuda_mapping, Mapping)
+        or cuda_mapping.get("method") != "host_trigger_plus_cuda_origin_enqueue_plus_cuda_elapsed"
+        or cuda_mapping.get("trigger_source") != "chipwhisperer.force"
+        or isinstance(cuda_start, bool)
         or not isinstance(cuda_start, int)
         or isinstance(cuda_end, bool)
         or not isinstance(cuda_end, int)
@@ -433,6 +572,7 @@ def load_sidecapture_optimizer_trace(
     return OptimizerPowerTrace(
         method=expected_method,
         store=root,
+        capture_mode="stream",
         adc_values=adc_values,
         adc_baseline_values=adc_baseline_values,
         adc_sample_rate_hz=float(sample_rate),
@@ -735,7 +875,7 @@ def plot_power_trace_comparison(
             nvml_ax.set_title("Timestamped NVML context", loc="left", fontweight="bold")
 
         fig.suptitle(
-            "Optimizer power traces · one capture per method\n"
+            "Optimizer power traces · true-stream ChipWhisperer · one capture per method\n"
             "Descriptive n=1 only; no repeat-based uncertainty interval",
             fontweight="bold",
         )
