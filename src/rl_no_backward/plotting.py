@@ -259,12 +259,14 @@ def _select_expected_reward(record: Mapping[str, Any]) -> tuple[float, str | Non
             continue
         if "expected_reward" in key:
             semantic_rank = 0
-        elif "exact_reward" in key:
+        elif "shaped_reward" in key:
             semantic_rank = 1
-        elif key == "reward" or key.endswith("_reward"):
+        elif "exact_reward" in key:
             semantic_rank = 2
-        elif key.endswith(("reward_mean", "mean_reward")):
+        elif key == "reward" or key.endswith("_reward"):
             semantic_rank = 3
+        elif key.endswith(("reward_mean", "mean_reward")):
+            semantic_rank = 4
         else:
             continue
         candidates.append(((_metric_scope_rank(key), semantic_rank, len(key)), key, value))
@@ -308,19 +310,45 @@ def _infer_kind(record: Mapping[str, Any], accuracy_source: str | None) -> str:
     return "record"
 
 
+def _infer_evaluation_split(record: Mapping[str, Any], kind: str) -> str:
+    """Canonicalise the split attached to an evaluation record.
+
+    The GSM8K runner writes validation evaluations without a ``split`` field
+    and marks the one locked official-test evaluation with ``split="test"``.
+    Treating an omitted split as validation therefore preserves compatibility
+    with older result files while making the held-out test row unambiguous.
+    """
+
+    if kind != "evaluation":
+        return ""
+    value = _find_value(record, ("evaluation_split", "eval_split", "split"))
+    if value is None or not str(value).strip():
+        return "validation"
+    split = _normalise_key(value)
+    if split in {"val", "validation", "valid", "dev", "eval", "evaluation"}:
+        return "validation"
+    if split in {"test", "official_test", "held_out_test", "heldout_test"}:
+        return "test"
+    if split in {"train", "training"}:
+        return "train"
+    return split
+
+
 def _canonical_record(raw: Mapping[str, Any], path: Path, line_number: int) -> dict[str, Any]:
     flat = _flatten_mapping(raw)
     accuracy, accuracy_source = _select_accuracy(flat)
     expected_reward, reward_source = _select_expected_reward(flat)
     method = _infer_method(flat, path)
     seed = _infer_seed(flat, path)
+    kind = _infer_kind(flat, accuracy_source)
 
     canonical = dict(flat)
     canonical.update(
         {
             "method": method,
             "seed": seed,
-            "kind": _infer_kind(flat, accuracy_source),
+            "kind": kind,
+            "evaluation_split": _infer_evaluation_split(flat, kind),
             "step": _find_number(
                 flat,
                 ("optimizer_step", "global_step", "step", "iteration", "update"),
@@ -493,6 +521,19 @@ def _deduplicate_run_points(
     return subset.drop_duplicates(["run_id", *coordinates], keep="last")
 
 
+def _evaluation_records(frame: pd.DataFrame, split: str) -> pd.DataFrame:
+    """Select canonical validation or official-test evaluation records."""
+
+    subset = frame[frame["kind"] == "evaluation"]
+    if "evaluation_split" not in subset:
+        # DataFrames assembled by callers rather than :func:`load_results`
+        # predate split canonicalisation and therefore follow the historical
+        # convention that recurring evaluations are validation measurements.
+        return subset if split == "validation" else subset.iloc[0:0]
+    canonical_split = subset["evaluation_split"].fillna("validation").astype(str)
+    return subset[canonical_split == split]
+
+
 def aggregate_metrics(
     frame: pd.DataFrame,
     *,
@@ -506,8 +547,13 @@ def aggregate_metrics(
 
     if by not in {"step", "environment_samples"}:
         raise ValueError("by must be 'step' or 'environment_samples'")
-    subset = frame
-    if kind is not None:
+    if kind == "evaluation":
+        # Learning-curve aggregation must never fold the one-shot official
+        # test measurement into the validation trajectory at the same step.
+        subset = _evaluation_records(frame, "validation")
+    else:
+        subset = frame
+    if kind is not None and kind != "evaluation":
         subset = subset[subset["kind"] == kind]
     subset = _deduplicate_run_points(subset, metric=metric, coordinates=(by,))
     rows: list[dict[str, Any]] = []
@@ -540,7 +586,11 @@ def _curve_by_step(
     bootstrap_samples: int,
     bootstrap_seed: int,
 ) -> pd.DataFrame:
-    subset = frame[frame["kind"] == kind]
+    subset = (
+        _evaluation_records(frame, "validation")
+        if kind == "evaluation"
+        else frame[frame["kind"] == kind]
+    )
     subset = _deduplicate_run_points(subset, metric=metric, coordinates=("step",))
     subset = subset[np.isfinite(pd.to_numeric(subset[x_column], errors="coerce"))]
     rows: list[dict[str, Any]] = []
@@ -602,19 +652,28 @@ def _per_run_summary(frame: pd.DataFrame) -> pd.DataFrame:
             evaluations = group[
                 np.isfinite(group["accuracy"]) | np.isfinite(group["expected_reward"])
             ]
+        validation_evaluations = _evaluation_records(group, "validation")
+        test_evaluations = _evaluation_records(group, "test")
+        final_evaluations = (
+            test_evaluations
+            if not test_evaluations.empty
+            else validation_evaluations
+            if not validation_evaluations.empty
+            else evaluations
+        )
         training = group[group["kind"] == "train_step"]
         score_sources = [
             str(value)
-            for value in evaluations.get("score_source", pd.Series(dtype=object)).dropna()
+            for value in final_evaluations.get("score_source", pd.Series(dtype=object)).dropna()
         ]
         row: dict[str, Any] = {
             "run_id": run_id,
             "method": str(group["method"].iloc[0]),
             "seed": group["seed"].iloc[0],
             "score_source": Counter(score_sources).most_common(1)[0][0] if score_sources else "",
-            "final_score": _last_finite(evaluations, "score"),
-            "final_accuracy": _last_finite(evaluations, "accuracy"),
-            "final_expected_reward": _last_finite(evaluations, "expected_reward"),
+            "final_score": _last_finite(final_evaluations, "score"),
+            "final_accuracy": _last_finite(final_evaluations, "accuracy"),
+            "final_expected_reward": _last_finite(final_evaluations, "expected_reward"),
             "final_environment_samples": _last_finite(group, "environment_samples"),
             "final_wall_time_seconds": _last_finite(group, "wall_time_seconds"),
             "final_forward_calls": _last_finite(group, "forward_calls"),
@@ -633,7 +692,7 @@ def _per_run_summary(frame: pd.DataFrame) -> pd.DataFrame:
             ("environment_samples", "environment_samples"),
             ("wall_time_seconds", "wall_time_seconds"),
         ):
-            area, normalised = _run_auc(evaluations, x_column, "score")
+            area, normalised = _run_auc(validation_evaluations, x_column, "score")
             row[f"auc_{suffix}"] = area
             row[f"normalised_auc_{suffix}"] = normalised
         rows.append(row)
@@ -785,6 +844,189 @@ def _save_figure(fig: plt.Figure, output_dir: Path, stem: str) -> dict[str, Path
     return paths
 
 
+def find_gsm8k_fd_diagnostic(input_dir: str | Path) -> Path | None:
+    """Find the real-model finite-difference diagnostic near benchmark runs.
+
+    The benchmark and diagnostic commands intentionally write independent
+    artifacts. Report generation therefore looks first below ``input_dir``
+    and then in a sibling ``diagnostics`` directory. The latter matches the
+    standard layout ``artifacts/{final_gsm8k,diagnostics}``. Returning
+    ``None`` keeps plotting useful for smoke runs that did not run the costly
+    real-model diagnostic.
+    """
+
+    source = Path(input_dir)
+    if source.is_file() and source.name == "gsm8k_fd.json":
+        return source
+    root = source.parent if source.is_file() else source
+
+    direct_candidates = (
+        root / "gsm8k_fd.json",
+        root / "diagnostics" / "gsm8k_fd.json",
+    )
+    for candidate in direct_candidates:
+        if candidate.is_file():
+            return candidate
+
+    recursive = sorted(path for path in root.rglob("gsm8k_fd.json") if path.is_file())
+    if recursive:
+        return recursive[0]
+
+    candidate = root.parent / "diagnostics" / "gsm8k_fd.json"
+    if candidate.is_file():
+        return candidate
+
+    # ``raw`` is a commonly supplied input subdirectory. In that case the
+    # standard diagnostics sibling is one additional level above it.
+    if root.name == "raw":
+        candidate = root.parent.parent / "diagnostics" / "gsm8k_fd.json"
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _finite_difference_diagnostic_rows(report: Mapping[str, Any]) -> pd.DataFrame:
+    """Extract plotting columns from a GSM8K diagnostic JSON object."""
+
+    finite_difference = report.get("finite_difference")
+    if not isinstance(finite_difference, Mapping):
+        raise TypeError("diagnostic JSON is missing finite_difference object")
+    raw_results = finite_difference.get("results")
+    if not isinstance(raw_results, Sequence) or isinstance(raw_results, (str, bytes)):
+        raise TypeError("diagnostic JSON is missing finite_difference.results array")
+
+    rows: list[dict[str, float]] = []
+    for raw_result in raw_results:
+        if not isinstance(raw_result, Mapping):
+            continue
+        agreement = raw_result.get("agreement_with_exact_projected_gradient")
+        fisher = raw_result.get("fisher")
+        if not isinstance(agreement, Mapping) or not isinstance(fisher, Mapping):
+            continue
+        row = {
+            "mu": pd.to_numeric(raw_result.get("mu"), errors="coerce"),
+            "cosine_similarity": pd.to_numeric(agreement.get("cosine_similarity"), errors="coerce"),
+            "relative_l2_error": pd.to_numeric(agreement.get("relative_l2_error"), errors="coerce"),
+            "legacy_to_correct_trace_ratio": pd.to_numeric(
+                fisher.get("legacy_to_correct_trace_ratio"), errors="coerce"
+            ),
+        }
+        if math.isfinite(float(row["mu"])) and float(row["mu"]) > 0.0:
+            rows.append({key: float(value) for key, value in row.items()})
+    if not rows:
+        raise ValueError("diagnostic JSON contains no plottable finite-difference results")
+    return pd.DataFrame(rows).sort_values("mu").reset_index(drop=True)
+
+
+def plot_finite_difference_diagnostics(
+    diagnostic_json: str | Path,
+    output_dir: str | Path,
+) -> dict[str, Path]:
+    """Render finite-difference agreement and Fisher-curvature diagnostics.
+
+    The left panel compares each central-difference radius against an exact,
+    non-updating projected-gradient oracle. The right panel reports the
+    legacy completion-outer Fisher trace divided by the token-local trace that
+    matches the benchmark's length-normalized sequence KL.
+    """
+
+    diagnostic_path = Path(diagnostic_json)
+    try:
+        report = json.loads(diagnostic_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ValueError(f"could not read diagnostic JSON {diagnostic_path}: {error}") from error
+    if not isinstance(report, Mapping):
+        raise TypeError("diagnostic JSON root must be an object")
+    rows = _finite_difference_diagnostic_rows(report)
+
+    output = Path(output_dir)
+    output.mkdir(parents=True, exist_ok=True)
+    mus = rows["mu"].to_numpy(dtype=float)
+    with plt.rc_context(PLOT_STYLE):
+        fig, axes = plt.subplots(1, 2, figsize=(10.5, 4.15))
+
+        agreement_specs = (
+            ("cosine_similarity", "Cosine similarity", "#0072B2", "o", "-"),
+            ("relative_l2_error", "Relative L2 error", "#D55E00", "s", "--"),
+        )
+        plotted_agreement = False
+        agreement_values: list[float] = []
+        for column, label, colour, marker, line_style in agreement_specs:
+            values = rows[column].to_numpy(dtype=float)
+            finite = np.isfinite(values)
+            if not finite.any():
+                continue
+            axes[0].plot(
+                mus[finite],
+                values[finite],
+                color=colour,
+                marker=marker,
+                linestyle=line_style,
+                markersize=5,
+                label=label,
+            )
+            agreement_values.extend(values[finite])
+            plotted_agreement = True
+        axes[0].set_title("Projected-gradient fidelity", loc="left", fontweight="bold")
+        axes[0].set_xlabel("Finite-difference radius, μ")
+        axes[0].set_ylabel("Dimensionless agreement metric")
+        if plotted_agreement:
+            axes[0].legend(loc="best")
+            lower = min(0.0, min(agreement_values) - 0.06)
+            upper = max(1.02, max(agreement_values) + 0.06)
+            axes[0].set_ylim(lower, upper)
+        else:
+            _empty_panel(axes[0], "No gradient-agreement metrics")
+
+        ratios = rows["legacy_to_correct_trace_ratio"].to_numpy(dtype=float)
+        finite_ratios = np.isfinite(ratios) & (ratios >= 0.0)
+        axes[1].set_title("Fisher curvature mismatch", loc="left", fontweight="bold")
+        axes[1].set_xlabel("Finite-difference radius, μ")
+        axes[1].set_ylabel("Legacy completion trace / token-local trace")
+        if finite_ratios.any():
+            axes[1].plot(
+                mus[finite_ratios],
+                ratios[finite_ratios],
+                color="#009E73",
+                marker="D",
+                markersize=5,
+            )
+            axes[1].fill_between(
+                mus[finite_ratios],
+                0.0,
+                ratios[finite_ratios],
+                color="#009E73",
+                alpha=0.12,
+                linewidth=0,
+            )
+            axes[1].yaxis.set_major_formatter(PercentFormatter(xmax=1.0, decimals=0))
+            ratio_max = float(ratios[finite_ratios].max())
+            axes[1].set_ylim(0.0, max(0.05, ratio_max * 1.28))
+            axes[1].text(
+                0.02,
+                0.97,
+                "100% would indicate equal trace",
+                transform=axes[1].transAxes,
+                ha="left",
+                va="top",
+                color="#6B7280",
+                fontsize=8,
+            )
+        else:
+            _empty_panel(axes[1], "No Fisher-trace ratios")
+
+        for ax in axes:
+            ax.set_xscale("log")
+            ax.set_xticks(mus)
+            ax.set_xticklabels([f"{mu:g}" for mu in mus])
+            ax.tick_params(axis="x", which="minor", labelbottom=False)
+        fig.suptitle(
+            "Forward-only estimator validation on fixed GSM8K rollouts",
+            fontweight="bold",
+        )
+        return _save_figure(fig, output, "fd_diagnostics")
+
+
 def _plot_learning_curve(
     frame: pd.DataFrame,
     output_dir: Path,
@@ -807,6 +1049,9 @@ def _plot_learning_curve(
     methods = _ordered_methods(aggregate["method"] if not aggregate.empty else [])
     styles = _method_styles(methods)
     all_values: list[float] = []
+    finite_x = pd.to_numeric(aggregate.get(x_column), errors="coerce").to_numpy(dtype=float)
+    finite_x = finite_x[np.isfinite(finite_x)]
+    x_extent = (float(finite_x.min()), float(finite_x.max())) if finite_x.size else (0.0, 0.0)
     for method in methods:
         group = aggregate[aggregate["method"] == method].sort_values(x_column)
         x = group[x_column].to_numpy(dtype=float)
@@ -814,10 +1059,21 @@ def _plot_learning_curve(
         low = group["ci_low"].to_numpy(dtype=float)
         high = group["ci_high"].to_numpy(dtype=float)
         colour, marker = styles[method]
+        line_style = "-"
+        if method == "base" and len(x) == 1 and x_extent[1] > x_extent[0]:
+            # A frozen policy consumes no training samples. Draw its one
+            # deterministic evaluation as a horizontal reference instead of
+            # leaving an easy-to-miss point at the origin.
+            x = np.asarray(x_extent)
+            mean = np.repeat(mean, 2)
+            low = np.repeat(low, 2)
+            high = np.repeat(high, 2)
+            line_style = "--"
         ax.plot(
             x,
             mean,
             color=colour,
+            linestyle=line_style,
             marker=marker,
             markevery=max(1, len(x) // 6),
             markersize=4.5,
@@ -849,7 +1105,7 @@ def _plot_final_performance(
     metrics: list[tuple[str, str]] = []
     if "final_accuracy_mean" in summary and summary["final_accuracy_mean"].notna().any():
         metrics.append(("final_accuracy", "Exact-match accuracy"))
-    if (
+    elif (
         "final_expected_reward_mean" in summary
         and summary["final_expected_reward_mean"].notna().any()
     ):
@@ -912,7 +1168,11 @@ def _plot_compute_memory(
     styles = _method_styles(methods)
     indexed = summary.set_index("method")
     specifications = (
-        ("final_forward_calls_mean", "Forward-pass calls", 1.0),
+        (
+            "final_forward_calls_mean",
+            "Teacher-forced microbatch calls\n(rollout/eval excluded)",
+            1.0,
+        ),
         ("peak_gpu_memory_bytes_mean", "Peak allocated GPU memory (GiB)", 2**30),
     )
     score_values: list[float] = []
@@ -1201,6 +1461,23 @@ def plot_results(
     for stem, paths in figures.items():
         for extension, path in paths.items():
             artifacts[f"{stem}_{extension}"] = path
+
+    diagnostic_path = find_gsm8k_fd_diagnostic(input_dir)
+    if diagnostic_path is not None:
+        try:
+            diagnostic_paths = plot_finite_difference_diagnostics(
+                diagnostic_path,
+                output,
+            )
+        except (TypeError, ValueError) as error:
+            warnings.warn(
+                f"skipping invalid finite-difference diagnostic: {error}",
+                UserWarning,
+                stacklevel=2,
+            )
+        else:
+            for extension, path in diagnostic_paths.items():
+                artifacts[f"fd_diagnostics_{extension}"] = path
     return artifacts
 
 

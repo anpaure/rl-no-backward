@@ -183,6 +183,7 @@ def load_model_bundle(
     adapter_scale: float = 1.0,
     dtype: str = "bfloat16",
     device: str = "cuda",
+    revision: str | None = None,
 ) -> ModelBundle:
     """Load a frozen causal LM, calibrate bases, and insert residual-core adapters."""
 
@@ -190,13 +191,14 @@ def load_model_bundle(
 
     target_device = torch.device(device)
     torch_dtype = getattr(torch, dtype)
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    tokenizer = AutoTokenizer.from_pretrained(model_name, revision=revision)
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "left"
 
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
+        revision=revision,
         torch_dtype=torch_dtype,
         # Eager attention avoids cuDNN-SDPA planner failures observed on the
         # remote H100 software stack for short, heavily padded prompt batches.

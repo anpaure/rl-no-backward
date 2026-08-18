@@ -11,8 +11,10 @@ import pytest
 from rl_no_backward.plotting import (
     aggregate_metrics,
     bootstrap_mean_ci,
+    find_gsm8k_fd_diagnostic,
     load_results,
     main,
+    plot_finite_difference_diagnostics,
     plot_results,
     summarize_results,
 )
@@ -93,6 +95,50 @@ def _write_synthetic_runs(root: Path) -> None:
                     handle.write(json.dumps(record) + "\n")
 
 
+def _write_validation_and_test_run(root: Path) -> None:
+    path = root / "raw" / "bp_grpo_seed0.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    records = [
+        {
+            "kind": "evaluation",
+            "method": "bp_grpo",
+            "seed": 0,
+            "step": 0,
+            "environment_samples": 0,
+            "wall_time_seconds": 0.0,
+            "val_accuracy": 0.2,
+            "val_exact_reward": 0.2,
+            "val_shaped_reward": 0.3,
+        },
+        {
+            "kind": "evaluation",
+            "method": "bp_grpo",
+            "seed": 0,
+            "step": 10,
+            "environment_samples": 100,
+            "wall_time_seconds": 5.0,
+            "val_accuracy": 0.4,
+            "val_exact_reward": 0.4,
+            "val_shaped_reward": 0.5,
+        },
+        {
+            "kind": "evaluation",
+            "split": "test",
+            "method": "bp_grpo",
+            "seed": 0,
+            "step": 10,
+            "environment_samples": 100,
+            "wall_time_seconds": 5.0,
+            "test_accuracy": 0.9,
+            "test_exact_reward": 0.9,
+            "test_shaped_reward": 0.95,
+        },
+    ]
+    with path.open("w", encoding="utf-8") as handle:
+        for record in records:
+            handle.write(json.dumps(record) + "\n")
+
+
 def test_bootstrap_is_deterministic_and_ignores_nonfinite_values() -> None:
     first = bootstrap_mean_ci([0.1, 0.3, 0.5, np.nan], samples=500, seed=17)
     second = bootstrap_mean_ci([0.1, 0.3, 0.5, np.inf], samples=500, seed=17)
@@ -151,6 +197,32 @@ def test_aggregation_and_summary_have_bootstrap_ci_and_auc(tmp_path: Path) -> No
     assert summary.loc[summary["method"] == "fo_npg", "final_backward_calls_mean"].item() == 0
 
 
+def test_validation_curve_excludes_same_step_test_but_summary_prefers_test(
+    tmp_path: Path,
+) -> None:
+    _write_validation_and_test_run(tmp_path)
+    frame = load_results(tmp_path)
+
+    evaluations = frame[frame["kind"] == "evaluation"]
+    assert list(evaluations["evaluation_split"]) == ["validation", "validation", "test"]
+
+    curve = aggregate_metrics(
+        frame,
+        metric="accuracy",
+        by="environment_samples",
+        bootstrap_samples=100,
+    )
+    final_curve = curve[curve["environment_samples"] == 100]
+    assert len(final_curve) == 1
+    assert final_curve["mean"].item() == pytest.approx(0.4)
+
+    summary = summarize_results(frame, bootstrap_samples=100)
+    assert summary["final_accuracy_mean"].item() == pytest.approx(0.9)
+    assert summary["final_expected_reward_mean"].item() == pytest.approx(0.95)
+    assert summary["primary_metric_sources"].item() == "test_accuracy"
+    assert summary["normalised_auc_environment_samples_mean"].item() == pytest.approx(0.3)
+
+
 def test_plot_results_writes_readable_png_pdf_and_summary(tmp_path: Path) -> None:
     _write_synthetic_runs(tmp_path)
     output = tmp_path / "report"
@@ -202,3 +274,60 @@ def test_cli_main_accepts_bootstrap_controls(tmp_path: Path) -> None:
         == 0
     )
     assert (output / "summary.csv").exists()
+
+
+def _write_fd_diagnostic(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "diagnostic": "real_model_gsm8k_projected_finite_difference",
+        "finite_difference": {
+            "results": [
+                {
+                    "mu": mu,
+                    "agreement_with_exact_projected_gradient": {
+                        "cosine_similarity": cosine,
+                        "relative_l2_error": relative_error,
+                    },
+                    "fisher": {"legacy_to_correct_trace_ratio": ratio},
+                }
+                for mu, cosine, relative_error, ratio in (
+                    (0.25, 0.979, 0.236, 0.019),
+                    (0.5, 0.886, 0.504, 0.021),
+                    (1.0, 0.992, 0.131, 0.023),
+                    (2.0, 0.999, 0.036, 0.022),
+                )
+            ]
+        },
+    }
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def test_finite_difference_diagnostic_plot_is_public_and_readable(tmp_path: Path) -> None:
+    diagnostic = tmp_path / "gsm8k_fd.json"
+    _write_fd_diagnostic(diagnostic)
+
+    paths = plot_finite_difference_diagnostics(diagnostic, tmp_path / "figures")
+
+    assert set(paths) == {"png", "pdf"}
+    assert all(path.exists() and path.stat().st_size > 1_000 for path in paths.values())
+    image = plt.imread(paths["png"])
+    assert image.ndim == 3
+    assert min(image.shape[:2]) > 400
+
+
+def test_plot_results_discovers_sibling_gsm8k_diagnostic(tmp_path: Path) -> None:
+    final_run = tmp_path / "artifacts" / "final_gsm8k"
+    _write_synthetic_runs(final_run)
+    diagnostic = tmp_path / "artifacts" / "diagnostics" / "gsm8k_fd.json"
+    _write_fd_diagnostic(diagnostic)
+
+    assert find_gsm8k_fd_diagnostic(final_run) == diagnostic
+    artifacts = plot_results(
+        final_run,
+        tmp_path / "report",
+        bootstrap_samples=30,
+        bootstrap_seed=4,
+    )
+
+    assert artifacts["fd_diagnostics_png"].exists()
+    assert artifacts["fd_diagnostics_pdf"].exists()

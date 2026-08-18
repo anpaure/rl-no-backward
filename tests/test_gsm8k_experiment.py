@@ -1,10 +1,17 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+from types import SimpleNamespace
+
 import pytest
+import torch
 
 from rl_no_backward.gsm8k import GSM8KExample
 from rl_no_backward.gsm8k_experiment import (
     GSM8KExperimentConfig,
+    _excluded_test_ids,
+    _rollout_truncation_fraction,
     shaped_gsm8k_reward,
 )
 
@@ -42,3 +49,29 @@ def test_gsm8k_config_validates_benchmark_invariants() -> None:
         GSM8KExperimentConfig(numeric_shaping_weight=1.0).validate()
     with pytest.raises(ValueError, match="group_size"):
         GSM8KExperimentConfig(group_size=1).validate()
+    with pytest.raises(ValueError, match="model_revision"):
+        GSM8KExperimentConfig(model_revision="").validate()
+
+
+def test_excluded_test_ids_are_loaded_from_pilot_metadata(tmp_path: Path) -> None:
+    metadata = tmp_path / "metadata.json"
+    metadata.write_text(
+        json.dumps({"test_example_ids": ["seen-a", "seen-b", "seen-a"]}),
+        encoding="utf-8",
+    )
+
+    assert _excluded_test_ids(str(metadata)) == {"seen-a", "seen-b"}
+
+    metadata.write_text(json.dumps({"test_example_ids": [1]}), encoding="utf-8")
+    with pytest.raises(ValueError, match="string list"):
+        _excluded_test_ids(str(metadata))
+
+
+def test_rollout_truncation_uses_terminal_eos_token() -> None:
+    rollout = SimpleNamespace(
+        response_lengths=torch.tensor([[3, 3]]),
+        response_input_ids=torch.tensor([[[7, 8, 2], [7, 8, 9]]]),
+    )
+    tokenizer = SimpleNamespace(eos_token_id=2)
+
+    assert _rollout_truncation_fraction(rollout, tokenizer) == pytest.approx(0.5)

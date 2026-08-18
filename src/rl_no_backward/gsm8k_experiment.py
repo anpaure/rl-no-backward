@@ -52,6 +52,8 @@ GSM8K_METHODS = ("base", "bp_grpo", "fo_pg", "fo_npg", "focus_npg")
 @dataclass
 class GSM8KExperimentConfig:
     model_name: str = "Qwen/Qwen2.5-1.5B-Instruct"
+    model_revision: str | None = None
+    dataset_revision: str | None = None
     dtype: str = "bfloat16"
     device: str = "cuda"
     adapter_rank: int = 8
@@ -61,6 +63,7 @@ class GSM8KExperimentConfig:
     val_size: int = 64
     test_size: int = 128
     run_test_evaluation: bool = False
+    test_exclusion_metadata: str | None = None
     subset_seed: int = 0
     min_reasoning_lines: int = 2
     max_reasoning_lines: int = 3
@@ -118,6 +121,10 @@ class GSM8KExperimentConfig:
             raise ValueError("test_size must be non-negative")
         if self.run_test_evaluation and self.test_size < 1:
             raise ValueError("test_size must be positive when test evaluation is enabled")
+        for name in ("model_revision", "dataset_revision", "test_exclusion_metadata"):
+            value = getattr(self, name)
+            if value is not None and (not isinstance(value, str) or not value.strip()):
+                raise ValueError(f"{name} must be a non-empty string or null")
         if self.group_size < 2:
             raise ValueError("group_size must be at least 2")
         if not 0.0 <= self.numeric_shaping_weight < 1.0:
@@ -228,13 +235,16 @@ def _start_wandb(
         return None
     import wandb
 
+    optimizer_family = (
+        "baseline" if method == "base" else "backprop" if method == "bp_grpo" else "forward-only"
+    )
     run = wandb.init(
         project=config.wandb_project,
         entity=config.wandb_entity,
         group=f"gsm8k-{output_dir.name}",
         name=f"gsm8k-{method}-seed-{seed}",
         job_type="evaluation" if method == "base" else "train",
-        tags=["gsm8k", method, "forward-only" if method.startswith("fo") else "backprop"],
+        tags=["gsm8k", method, optimizer_family],
         config={**asdict(config), "method": method, "seed": seed},
         mode=config.wandb_mode,
         dir=str(output_dir),
@@ -268,6 +278,27 @@ def _log_wandb(run: Any | None, record: dict[str, Any]) -> None:
     run.log(payload)
 
 
+def _eos_token_ids(tokenizer: object) -> tuple[int, ...]:
+    value = getattr(tokenizer, "eos_token_id", None)
+    if value is None:
+        return ()
+    if isinstance(value, int):
+        return (value,)
+    return tuple(int(token_id) for token_id in value)
+
+
+def _rollout_truncation_fraction(rollout: Any, tokenizer: object) -> float:
+    eos_ids = _eos_token_ids(tokenizer)
+    if not eos_ids:
+        return float("nan")
+    lengths = rollout.response_lengths.clamp_min(1)
+    final_ids = rollout.response_input_ids.gather(-1, (lengths - 1).unsqueeze(-1)).squeeze(-1)
+    ended = torch.zeros_like(final_ids, dtype=torch.bool)
+    for token_id in eos_ids:
+        ended |= final_ids.eq(token_id)
+    return float((~ended).float().mean().item())
+
+
 @torch.inference_mode()
 def evaluate_gsm8k(
     bundle: ModelBundle,
@@ -282,7 +313,9 @@ def evaluate_gsm8k(
     shaped_values: list[float] = []
     valid_values: list[float] = []
     response_lengths: list[int] = []
+    truncated_values: list[float] = []
     rows: list[dict[str, Any]] = []
+    eos_ids = _eos_token_ids(bundle.tokenizer)
     eos_id = bundle.tokenizer.eos_token_id
     pad_id = bundle.tokenizer.pad_token_id
     for start in range(0, len(examples), config.eval_batch_size):
@@ -311,17 +344,23 @@ def evaluate_gsm8k(
             predicted = extract_model_answer(completion)
             exact = exact_match_reward(completion, example)
             shaped = shaped_gsm8k_reward(completion, example, config.numeric_shaping_weight)
-            if eos_id is not None:
-                eos_positions = token_ids.eq(eos_id).nonzero(as_tuple=False)
+            if eos_ids:
+                eos_mask = torch.zeros_like(token_ids, dtype=torch.bool)
+                for token_id in eos_ids:
+                    eos_mask |= token_ids.eq(token_id)
+                eos_positions = eos_mask.nonzero(as_tuple=False)
                 length = (
                     int(eos_positions[0].item()) + 1 if eos_positions.numel() else token_ids.numel()
                 )
+                truncated = not bool(eos_positions.numel())
             else:
                 length = token_ids.numel()
+                truncated = False
             exact_values.append(exact)
             shaped_values.append(shaped)
             valid_values.append(float(predicted is not None))
             response_lengths.append(length)
+            truncated_values.append(float(truncated))
             rows.append(
                 {
                     "example_id": example.example_id,
@@ -332,6 +371,7 @@ def evaluate_gsm8k(
                     "exact_reward": exact,
                     "shaped_reward": shaped,
                     "response_tokens": length,
+                    "truncated": truncated,
                 }
             )
     metrics = {
@@ -341,6 +381,9 @@ def evaluate_gsm8k(
         f"{metric_prefix}_valid_answer_rate": float(sum(valid_values) / len(valid_values)),
         f"{metric_prefix}_mean_response_tokens": float(
             sum(response_lengths) / len(response_lengths)
+        ),
+        f"{metric_prefix}_truncation_fraction": float(
+            sum(truncated_values) / len(truncated_values)
         ),
     }
     return metrics, rows
@@ -361,6 +404,32 @@ def _git_commit() -> str | None:
         ).strip()
     except (subprocess.CalledProcessError, FileNotFoundError):
         return None
+
+
+def _git_dirty() -> bool | None:
+    try:
+        output = subprocess.check_output(
+            ["git", "status", "--porcelain", "--untracked-files=no"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
+    return bool(output.strip())
+
+
+def _excluded_test_ids(metadata_path: str | None) -> set[str]:
+    if metadata_path is None:
+        return set()
+    path = Path(metadata_path)
+    try:
+        metadata = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ValueError(f"could not read test exclusion metadata {path}: {error}") from error
+    values = metadata.get("test_example_ids") if isinstance(metadata, Mapping) else None
+    if not isinstance(values, list) or not all(isinstance(value, str) for value in values):
+        raise ValueError(f"{path} must contain a string list named test_example_ids")
+    return set(values)
 
 
 def _finish_run_artifact(
@@ -432,6 +501,7 @@ def run_gsm8k_trial(
     cumulative_scored_tokens = 0
     cumulative_forward_calls = 0
     cumulative_backward_calls = 0
+    cumulative_teacher_forced_examples = 0
     final_samples = [dict(sample) for sample in initial_val_samples]
     initial_record = {
         "kind": "evaluation",
@@ -444,6 +514,7 @@ def run_gsm8k_trial(
         "scored_tokens": 0,
         "forward_calls": 0,
         "backward_calls": 0,
+        "teacher_forced_examples": 0,
         **initial_val_metrics,
     }
     _append_jsonl(raw_path, initial_record)
@@ -522,6 +593,9 @@ def run_gsm8k_trial(
         cumulative_scored_tokens += result.scored_tokens + rollout.valid_response_tokens
         cumulative_forward_calls += result.forward_calls + old_score_calls
         cumulative_backward_calls += result.backward_calls
+        cumulative_teacher_forced_examples += (
+            result.teacher_forced_examples + rollout.environment_samples
+        )
         _sync(bundle.device)
         step_record = {
             "kind": "train_step",
@@ -534,6 +608,7 @@ def run_gsm8k_trial(
             "scored_tokens": cumulative_scored_tokens,
             "forward_calls": cumulative_forward_calls,
             "backward_calls": cumulative_backward_calls,
+            "teacher_forced_examples": cumulative_teacher_forced_examples,
             "peak_gpu_memory_bytes": (
                 int(torch.cuda.max_memory_allocated(bundle.device))
                 if bundle.device.type == "cuda"
@@ -543,6 +618,7 @@ def run_gsm8k_trial(
             "exact_zero_advantage_fraction": exact_zero_advantage_fraction,
             "rollout_shaped_reward": float(rollout.rewards.mean().item()),
             "mean_response_tokens": float(rollout.response_lengths.float().mean().item()),
+            "rollout_truncation_fraction": _rollout_truncation_fraction(rollout, bundle.tokenizer),
             **asdict(result),
         }
         # Result counters are per-step; the canonical top-level counters are cumulative.
@@ -553,6 +629,7 @@ def run_gsm8k_trial(
                 "scored_tokens": cumulative_scored_tokens,
                 "forward_calls": cumulative_forward_calls,
                 "backward_calls": cumulative_backward_calls,
+                "teacher_forced_examples": cumulative_teacher_forced_examples,
             }
         )
         _append_jsonl(raw_path, step_record)
@@ -575,6 +652,7 @@ def run_gsm8k_trial(
                 "scored_tokens": cumulative_scored_tokens,
                 "forward_calls": cumulative_forward_calls,
                 "backward_calls": cumulative_backward_calls,
+                "teacher_forced_examples": cumulative_teacher_forced_examples,
                 "peak_gpu_memory_bytes": (
                     int(torch.cuda.max_memory_allocated(bundle.device))
                     if bundle.device.type == "cuda"
@@ -618,6 +696,7 @@ def run_gsm8k_trial(
             "scored_tokens": cumulative_scored_tokens,
             "forward_calls": cumulative_forward_calls,
             "backward_calls": cumulative_backward_calls,
+            "teacher_forced_examples": cumulative_teacher_forced_examples,
             "peak_gpu_memory_bytes": (
                 int(torch.cuda.max_memory_allocated(bundle.device))
                 if bundle.device.type == "cuda"
@@ -660,7 +739,9 @@ def run_gsm8k_benchmark(
         max_reasoning_lines=config.max_reasoning_lines,
         max_answer_magnitude=config.max_answer_magnitude,
     )
-    official_train = filter_by_difficulty(load_gsm8k_split("train"), difficulty)
+    official_train = filter_by_difficulty(
+        load_gsm8k_split("train", revision=config.dataset_revision), difficulty
+    )
     train_and_val = select_seeded_subset(
         official_train,
         config.train_size + config.val_size,
@@ -670,8 +751,14 @@ def run_gsm8k_benchmark(
     train_examples = train_and_val[: config.train_size]
     val_examples = train_and_val[config.train_size :]
     test_examples: tuple[GSM8KExample, ...] = ()
+    excluded_test_ids = _excluded_test_ids(config.test_exclusion_metadata)
     if config.run_test_evaluation:
-        official_test = filter_by_difficulty(load_gsm8k_split("test"), difficulty)
+        official_test = filter_by_difficulty(
+            load_gsm8k_split("test", revision=config.dataset_revision), difficulty
+        )
+        official_test = tuple(
+            example for example in official_test if example.example_id not in excluded_test_ids
+        )
         test_examples = select_seeded_subset(
             official_test,
             config.test_size,
@@ -681,7 +768,10 @@ def run_gsm8k_benchmark(
 
     from transformers import AutoTokenizer
 
-    tokenizer = AutoTokenizer.from_pretrained(config.model_name)
+    tokenizer = AutoTokenizer.from_pretrained(
+        config.model_name,
+        revision=config.model_revision,
+    )
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "left"
@@ -698,6 +788,7 @@ def run_gsm8k_benchmark(
         adapter_scale=config.adapter_scale,
         dtype=config.dtype,
         device=config.device,
+        revision=config.model_revision,
     )
     initial_parameters = parameter_vector(bundle).clone()
     set_adapter_grad_enabled(bundle, False)
@@ -716,6 +807,10 @@ def run_gsm8k_benchmark(
         "val_example_ids": [example.example_id for example in val_examples],
         "test_example_ids": [example.example_id for example in test_examples],
         "git_commit": _git_commit(),
+        "git_dirty": _git_dirty(),
+        "resolved_model_revision": getattr(bundle.model.config, "_commit_hash", None),
+        "dataset_revision": config.dataset_revision,
+        "excluded_test_example_ids": sorted(excluded_test_ids),
         "python": platform.python_version(),
         "torch": torch.__version__,
         "cuda": torch.version.cuda,
