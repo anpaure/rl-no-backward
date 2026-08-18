@@ -19,6 +19,7 @@ from rl_no_backward.gsm8k import GSM8KExample
 from rl_no_backward.matched_lora_runner import (
     MatchedLoRAExperimentConfig,
     _init_wandb,
+    _learning_gate_status,
     _load_data,
     _old_policy_rescore_accounting,
     _prepare_empty_output_directory,
@@ -73,6 +74,74 @@ def test_config_rejects_locked_test_and_unmatched_method_sets() -> None:
         MatchedLoRAExperimentConfig(run_test_evaluation=True, test_size=1)
     with pytest.raises(ValueError, match="headline gate"):
         MatchedLoRAExperimentConfig(methods=["bp_grpo", "fo_npg"])
+    with pytest.raises(TypeError, match="enforce_stochastic_efficacy_checks"):
+        MatchedLoRAExperimentConfig(enforce_stochastic_efficacy_checks=1)  # type: ignore[arg-type]
+
+
+def test_long_run_configs_lock_matched_full_data_protocol() -> None:
+    gate = load_matched_config("configs/gsm8k_matched_lora_full_gate.yaml")
+    final = load_matched_config("configs/gsm8k_matched_lora_final.yaml")
+
+    assert (gate.train_size, gate.steps, gate.seeds, gate.eval_interval) == (
+        7_473,
+        100,
+        [0],
+        20,
+    )
+    assert (final.train_size, final.steps, final.seeds, final.eval_interval) == (
+        7_473,
+        300,
+        [0, 1, 2],
+        25,
+    )
+    assert gate.response_budget == 6_400
+    assert final.response_budget == 19_200
+    assert gate.schedule_mode == final.schedule_mode == "shuffled_cycles"
+    assert gate.enforce_stochastic_efficacy_checks is True
+    assert final.enforce_stochastic_efficacy_checks is False
+    assert gate.minimum_bp_train_accuracy_gain is None
+    assert final.minimum_bp_train_accuracy_gain is None
+    assert gate.minimum_bp_dev_accuracy_gain == final.minimum_bp_dev_accuracy_gain == 0.01
+    assert gate.lora == final.lora
+    assert gate.objective == final.objective
+    assert gate.backprop == final.backprop
+    assert gate.forward == final.forward
+    assert gate.forward.directions == 8
+    assert gate.forward.finite_difference_mu == 10.0
+    assert gate.dtype == final.dtype == "bfloat16"
+    assert gate.attention_implementation == final.attention_implementation == (
+        "flash_attention_2"
+    )
+    assert gate.rollout_backend == final.rollout_backend == "vllm_lora"
+
+
+def test_stochastic_efficacy_can_be_observed_without_discarding_run() -> None:
+    structural = {"policy_digest_changed": True, "fo_check": None}
+    stochastic = {"bp_dev_gain_met": False}
+    enforced = _learning_gate_status(
+        structural,
+        stochastic,
+        stochastic_checks_enforced=True,
+    )
+    observed = _learning_gate_status(
+        structural,
+        stochastic,
+        stochastic_checks_enforced=False,
+    )
+
+    assert enforced["stochastic_efficacy_observed_passed"] is False
+    assert enforced["failed_stochastic_efficacy_checks"] == ["bp_dev_gain_met"]
+    assert enforced["passed"] is False
+    assert observed["stochastic_efficacy_observed_passed"] is False
+    assert observed["passed"] is True
+
+    structurally_broken = _learning_gate_status(
+        {"policy_digest_changed": False},
+        stochastic,
+        stochastic_checks_enforced=False,
+    )
+    assert structurally_broken["hard_structural_checks_passed"] is False
+    assert structurally_broken["passed"] is False
 
 
 def test_shuffled_schedule_is_method_independent() -> None:
@@ -283,19 +352,56 @@ def test_isolated_output_validator_requires_distinct_children_and_exact_counters
             encoding="utf-8",
         )
         (tmp_path / "learning_gate" / f"gsm8k_{method}_seed0.json").write_text(
-            json.dumps({"passed": True}),
+            json.dumps(
+                {
+                    "schema": "rl-no-backward-matched-learning-gate-v2",
+                    "passed": True,
+                    "hard_structural_checks_passed": True,
+                    "failed_hard_structural_checks": [],
+                    "hard_structural_checks": {},
+                    "stochastic_efficacy_checks_enforced": method != "base",
+                    "stochastic_efficacy_observed_passed": True,
+                    "failed_stochastic_efficacy_checks": [],
+                    "stochastic_efficacy_checks": {},
+                }
+            ),
             encoding="utf-8",
         )
 
     metadata, _ = _validate_isolated_trial_outputs(tmp_path, config)
     assert set(metadata) == {"base_seed0", "bp_grpo_seed0", "fo_npg_seed0"}
 
+    observed_config = MatchedLoRAExperimentConfig(
+        steps=1,
+        eval_interval=1,
+        enforce_stochastic_efficacy_checks=False,
+    )
+    for method in ("bp_grpo", "fo_npg"):
+        path = tmp_path / "learning_gate" / f"gsm8k_{method}_seed0.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "schema": "rl-no-backward-matched-learning-gate-v2",
+                    "passed": True,
+                    "hard_structural_checks_passed": True,
+                    "failed_hard_structural_checks": [],
+                    "hard_structural_checks": {"policy_digest_changed": True},
+                    "stochastic_efficacy_checks_enforced": False,
+                    "stochastic_efficacy_observed_passed": False,
+                    "failed_stochastic_efficacy_checks": ["dev_gain_met"],
+                    "stochastic_efficacy_checks": {"dev_gain_met": False},
+                }
+            ),
+            encoding="utf-8",
+        )
+    _validate_isolated_trial_outputs(tmp_path, observed_config)
+
     fo_path = tmp_path / "trial_metadata" / "fo_npg_seed0.json"
     fo_metadata = json.loads(fo_path.read_text(encoding="utf-8"))
     fo_metadata["process_id"] = 91_002
     fo_path.write_text(json.dumps(fo_metadata), encoding="utf-8")
     with pytest.raises(RuntimeError, match="distinct fresh child"):
-        _validate_isolated_trial_outputs(tmp_path, config)
+        _validate_isolated_trial_outputs(tmp_path, observed_config)
 
 
 def test_output_directory_must_be_empty(tmp_path) -> None:

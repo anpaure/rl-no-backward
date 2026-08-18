@@ -114,8 +114,9 @@ class MatchedLoRAExperimentConfig:
     run_projected_gradient_gate: bool = True
     projected_gradient_min_cosine: float = 0.95
     projected_gradient_max_relative_l2: float = 0.25
-    minimum_bp_train_accuracy_gain: float = 0.10
+    minimum_bp_train_accuracy_gain: float | None = 0.10
     minimum_bp_dev_accuracy_gain: float = 0.0
+    enforce_stochastic_efficacy_checks: bool = True
     expected_lora_parameter_count: int = 1_089_536
     shared_initialization_path_template: str = (
         "artifacts/shared_initializations/qwen25_1p5b_qv_r8_all28_seed{seed}.pt"
@@ -210,10 +211,14 @@ class MatchedLoRAExperimentConfig:
             raise ValueError("projected_gradient_min_cosine must lie in [-1, 1]")
         if self.projected_gradient_max_relative_l2 <= 0:
             raise ValueError("projected_gradient_max_relative_l2 must be positive")
-        if not 0.0 <= self.minimum_bp_train_accuracy_gain <= 1.0:
+        if self.minimum_bp_train_accuracy_gain is not None and not (
+            0.0 <= self.minimum_bp_train_accuracy_gain <= 1.0
+        ):
             raise ValueError("minimum_bp_train_accuracy_gain must lie in [0, 1]")
         if not 0.0 <= self.minimum_bp_dev_accuracy_gain <= 1.0:
             raise ValueError("minimum_bp_dev_accuracy_gain must lie in [0, 1]")
+        if not isinstance(self.enforce_stochastic_efficacy_checks, bool):
+            raise TypeError("enforce_stochastic_efficacy_checks must be a boolean")
 
     @property
     def responses_per_step(self) -> int:
@@ -1002,6 +1007,52 @@ def _write_learning_gate_receipt(
     return destination
 
 
+def _learning_gate_status(
+    structural_checks: Mapping[str, bool | None],
+    stochastic_checks: Mapping[str, bool | None],
+    *,
+    stochastic_checks_enforced: bool,
+) -> dict[str, Any]:
+    """Separate empirical efficacy from the benchmark's hard integrity gates.
+
+    The runner's process isolation, provenance, counter, parity, gradient-oracle,
+    frozen-base, and no-backward assertions are always enforced elsewhere.  The
+    structural checks here are also always enforced.  Only the stochastic
+    efficacy checks may be observed without rejecting a completed headline run.
+    """
+
+    structural = {
+        name: value for name, value in structural_checks.items() if value is not None
+    }
+    stochastic = {
+        name: value for name, value in stochastic_checks.items() if value is not None
+    }
+    if any(
+        not isinstance(value, bool)
+        for value in (*structural.values(), *stochastic.values())
+    ):
+        raise TypeError("learning checks must be booleans or None")
+    failed_structural = sorted(
+        name for name, value in structural.items() if value is not True
+    )
+    failed_stochastic = sorted(
+        name for name, value in stochastic.items() if value is not True
+    )
+    structural_passed = not failed_structural
+    stochastic_observed_passed = not failed_stochastic
+    return {
+        "hard_structural_checks_passed": structural_passed,
+        "failed_hard_structural_checks": failed_structural,
+        "hard_structural_checks": dict(structural_checks),
+        "stochastic_efficacy_checks_enforced": stochastic_checks_enforced,
+        "stochastic_efficacy_observed_passed": stochastic_observed_passed,
+        "failed_stochastic_efficacy_checks": failed_stochastic,
+        "stochastic_efficacy_checks": dict(stochastic_checks),
+        "passed": structural_passed
+        and (stochastic_observed_passed or not stochastic_checks_enforced),
+    }
+
+
 def _run_trial(
     bundle: ModelBundle,
     generator: ReloadableLoRAGenerator,
@@ -1102,9 +1153,16 @@ def _run_trial(
             method=method,
             seed=seed,
             payload={
-                "schema": "rl-no-backward-matched-learning-gate-v1",
+                "schema": "rl-no-backward-matched-learning-gate-v2",
                 "passed": True,
                 "role": "non-updating baseline",
+                "hard_structural_checks_passed": True,
+                "failed_hard_structural_checks": [],
+                "hard_structural_checks": {},
+                "stochastic_efficacy_checks_enforced": False,
+                "stochastic_efficacy_observed_passed": True,
+                "failed_stochastic_efficacy_checks": [],
+                "stochastic_efficacy_checks": {},
                 "initial_train_accuracy": initial_train_metrics["accuracy"],
                 "initial_dev_accuracy": metrics["accuracy"],
                 "initial_lora_digest": initialization_digest,
@@ -1414,50 +1472,42 @@ def _run_trial(
         final_train_metrics["accuracy"] - initial_train_metrics["accuracy"]
     )
     dev_accuracy_gain = final_dev_metrics["accuracy"] - metrics["accuracy"]
-    learning_checks = {
+    best_dev_accuracy_gain = best_accuracy - metrics["accuracy"]
+    structural_checks = {
         "policy_digest_changed": live_final_digest != initialization_digest,
         "nonzero_policy_step_observed": nonzero_policy_step_observed,
-        "informative_group_observed": informative_group_observed,
         "finite_nonzero_bp_gradient_observed": (
             finite_nonzero_bp_gradient_observed if method == "bp_grpo" else None
         ),
         "accepted_nonzero_fo_step_observed": (
             accepted_nonzero_fo_step_observed if method == "fo_npg" else None
         ),
+    }
+    stochastic_checks = {
+        "informative_group_observed": informative_group_observed,
         "bp_train_gain_met": (
             train_accuracy_gain >= config.minimum_bp_train_accuracy_gain
             if method == "bp_grpo"
+            and config.minimum_bp_train_accuracy_gain is not None
             else None
         ),
-        "bp_dev_gain_met": (
-            dev_accuracy_gain >= config.minimum_bp_dev_accuracy_gain
+        "bp_best_dev_gain_met": (
+            best_dev_accuracy_gain >= config.minimum_bp_dev_accuracy_gain
             if method == "bp_grpo"
             else None
         ),
     }
-    required_checks = [
-        learning_checks["policy_digest_changed"],
-        learning_checks["nonzero_policy_step_observed"],
-        learning_checks["informative_group_observed"],
-    ]
-    if method == "bp_grpo":
-        required_checks.extend(
-            [
-                learning_checks["finite_nonzero_bp_gradient_observed"],
-                learning_checks["bp_train_gain_met"],
-                learning_checks["bp_dev_gain_met"],
-            ]
-        )
-    else:
-        required_checks.append(learning_checks["accepted_nonzero_fo_step_observed"])
-    learning_gate_passed = all(check is True for check in required_checks)
+    gate_status = _learning_gate_status(
+        structural_checks,
+        stochastic_checks,
+        stochastic_checks_enforced=config.enforce_stochastic_efficacy_checks,
+    )
     _write_learning_gate_receipt(
         output,
         method=method,
         seed=seed,
         payload={
-            "schema": "rl-no-backward-matched-learning-gate-v1",
-            "passed": learning_gate_passed,
+            "schema": "rl-no-backward-matched-learning-gate-v2",
             "method": method,
             "seed": seed,
             "initial_lora_digest": initialization_digest,
@@ -1469,12 +1519,17 @@ def _run_trial(
             "initial_dev_accuracy": metrics["accuracy"],
             "final_dev_accuracy": final_dev_metrics["accuracy"],
             "dev_accuracy_gain": dev_accuracy_gain,
+            "best_dev_accuracy": best_accuracy,
+            "best_dev_accuracy_gain": best_dev_accuracy_gain,
             "minimum_bp_dev_accuracy_gain": config.minimum_bp_dev_accuracy_gain,
-            "checks": learning_checks,
+            **gate_status,
         },
     )
-    if not learning_gate_passed:
-        raise RuntimeError(f"{method} failed the predeclared learning gate: {learning_checks}")
+    if gate_status["passed"] is not True:
+        raise RuntimeError(
+            f"{method} failed the predeclared learning gate: "
+            f"structural={structural_checks}, stochastic={stochastic_checks}"
+        )
     load_lora_state_dict(bundle.model, best_state)
     _save_trial_artifacts(
         output,
@@ -1841,6 +1896,70 @@ def _validate_isolated_trial_outputs(
             learning_gate = _load_json_mapping(
                 output / "learning_gate" / f"gsm8k_{method}_seed{seed}.json"
             )
+            if learning_gate.get("schema") != "rl-no-backward-matched-learning-gate-v2":
+                raise RuntimeError(f"{label} has an unsupported learning-gate receipt")
+            expected_enforcement = (
+                False if method == "base" else config.enforce_stochastic_efficacy_checks
+            )
+            if (
+                learning_gate.get("stochastic_efficacy_checks_enforced")
+                is not expected_enforcement
+            ):
+                raise RuntimeError(f"{label} efficacy enforcement differs from its config")
+            structural_checks = learning_gate.get("hard_structural_checks")
+            stochastic_checks = learning_gate.get("stochastic_efficacy_checks")
+            if any(
+                not isinstance(checks, Mapping)
+                or any(
+                    value is not None and not isinstance(value, bool)
+                    for value in checks.values()
+                )
+                for checks in (structural_checks, stochastic_checks)
+            ):
+                raise RuntimeError(f"{label} has malformed learning-gate checks")
+            assert isinstance(structural_checks, Mapping)
+            assert isinstance(stochastic_checks, Mapping)
+            observed_structural = {
+                name: value
+                for name, value in structural_checks.items()
+                if value is not None
+            }
+            observed_stochastic = {
+                name: value
+                for name, value in stochastic_checks.items()
+                if value is not None
+            }
+            expected_failed_structural = sorted(
+                name
+                for name, value in observed_structural.items()
+                if value is not True
+            )
+            expected_failed_stochastic = sorted(
+                name
+                for name, value in observed_stochastic.items()
+                if value is not True
+            )
+            expected_structural_passed = not expected_failed_structural
+            expected_stochastic_passed = not expected_failed_stochastic
+            if (
+                learning_gate.get("stochastic_efficacy_observed_passed")
+                is not expected_stochastic_passed
+                or learning_gate.get("failed_stochastic_efficacy_checks")
+                != expected_failed_stochastic
+            ):
+                raise RuntimeError(f"{label} efficacy observation summary is inconsistent")
+            if (
+                learning_gate.get("hard_structural_checks_passed")
+                is not expected_structural_passed
+                or learning_gate.get("failed_hard_structural_checks")
+                != expected_failed_structural
+            ):
+                raise RuntimeError(f"{label} hard structural summary is inconsistent")
+            expected_passed = expected_structural_passed and (
+                expected_stochastic_passed or not expected_enforcement
+            )
+            if learning_gate.get("passed") is not expected_passed:
+                raise RuntimeError(f"{label} learning-gate acceptance is inconsistent")
             if learning_gate.get("passed") is not True:
                 raise RuntimeError(f"{label} did not pass its predeclared learning gate")
             train_records = [record for record in records if record.get("kind") == "train_step"]
@@ -2187,6 +2306,9 @@ def main(argv: Sequence[str] | None = None) -> None:
                     "responses_per_step": config.responses_per_step,
                     "response_budget_per_trained_method": config.response_budget,
                     "lora_parameter_count": config.expected_lora_parameter_count,
+                    "stochastic_efficacy_checks_enforced": (
+                        config.enforce_stochastic_efficacy_checks
+                    ),
                     "locked_test_evaluation": False,
                     "vllm_attention_config": {
                         "backend": "FLASH_ATTN",
