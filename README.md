@@ -92,7 +92,7 @@ Run the real-model numerical audit separately:
 
 ```bash
 uv run python -m rl_no_backward.gsm8k_diagnostics \
-  --output artifacts/diagnostics/gsm8k_fd.json --max-tokens 256
+  --output artifacts/diagnostics/gsm8k_fd.json --max-tokens 512 --directions 8
 ```
 
 ## W&B and raw evidence
