@@ -1,0 +1,12 @@
+{
+  "checkpoint_path": "/home/amodo/rl-no-backward-results/matched-gate-cc02cd0/checkpoints/gsm8k_bp_grpo_seed0.pt",
+  "method": "bp_grpo",
+  "schema": "rl-no-backward-validation-selection-v1",
+  "seed": 0,
+  "selected_lora_state_digest": "4acb646373d414974882971ec47b9621ef4c541fce10d3a8f64ea3bb83a3fb73",
+  "selected_step": 20,
+  "selection_metric": "exact_match",
+  "selection_split": "development",
+  "selection_val_accuracy": 0.703125,
+  "tie_breaker": "latest_checkpoint"
+}

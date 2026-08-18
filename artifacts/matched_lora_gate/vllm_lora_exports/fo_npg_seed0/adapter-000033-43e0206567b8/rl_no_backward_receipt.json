@@ -1,0 +1,15 @@
+{
+  "adapter_model_sha256": "3e3e9738bf3a2bc3770e334e5d8de99a5b057b378e6221a75bf64f4295487176",
+  "adapter_name": "default",
+  "durable_hash_fields": [
+    "state_digest",
+    "adapter_model_sha256"
+  ],
+  "parameter_count": 1089536,
+  "path": "/home/amodo/rl-no-backward-results/matched-gate-cc02cd0/vllm_lora_exports/fo_npg_seed0/adapter-000033-43e0206567b8",
+  "path_is_transient": true,
+  "schema_version": 1,
+  "state_digest": "43e0206567b84b1fa4fc80f2e25bd435ab4d23569221cdb1d8a30d6898284775",
+  "version": 33,
+  "vllm_reload_semantics": "LoRARequest(load_inplace=True)"
+}

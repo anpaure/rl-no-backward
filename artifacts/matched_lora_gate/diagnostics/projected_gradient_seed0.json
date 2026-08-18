@@ -1,0 +1,47 @@
+{
+  "adapter_parameter_count": 1089536,
+  "behavior_logprob_digest": "165f2e26c6ca0c745115700b9c6882d8da528e58ff54d36cb2cdd8a170e1b9c3",
+  "frozen_base_parameter_digest_after": "6ce080d42e572f097f6d52e7b802e3e5a124d4ddd9a8262e120a21ed915e7012",
+  "frozen_base_parameter_digest_before": "6ce080d42e572f097f6d52e7b802e3e5a124d4ddd9a8262e120a21ed915e7012",
+  "model_snapshot": "/home/amodo/.cache/huggingface/hub/models--Qwen--Qwen2.5-1.5B-Instruct/snapshots/989aa7980e4cf806f80c7fef2b1adb7bc71aa306",
+  "passed": true,
+  "report": {
+    "cosine_similarity": 0.9642167091369629,
+    "directions": 8,
+    "exact_projected_norm": 0.00014021074457559735,
+    "finite_difference_mu": 10.0,
+    "finite_difference_norm": 0.00013389789091888815,
+    "parameter_digest_after": "36307dec45e65f28823c2b7b4faa7c49aba95503ae66d8f57f5f7507f7a8746f",
+    "parameter_digest_before": "36307dec45e65f28823c2b7b4faa7c49aba95503ae66d8f57f5f7507f7a8746f",
+    "parameter_integrity": true,
+    "relative_l2_error": 0.26527640223503113
+  },
+  "reverse_mode_scope": "dedicated non-updating oracle child only",
+  "rollout_token_digest": "b46a279b0acf21d6f5f78251deb11316790ae1f70c8fec5df16174853289d691",
+  "schema": "rl-no-backward-matched-lora-gradient-oracle-v1",
+  "seed": 0,
+  "shared_initialization_digest": "fc61cc8ca79ddb4d1964b2fa12710e983fb76ced22cf848b4ba57f6a1d011089",
+  "source_commit": "cc02cd0b96f8c1f330b321877cb5fe04dc0527a4",
+  "thresholds": {
+    "maximum_relative_l2_error": 0.35,
+    "minimum_cosine_similarity": 0.95
+  },
+  "vllm_reload_receipt": {
+    "active_lora_ids": [
+      1
+    ],
+    "adapter_model_sha256": "fa04840b7589b0e646d420c6591c1e8671a800019ca83e9f0cbc52867356a956",
+    "adapter_path": "/home/amodo/rl-no-backward-results/matched-gate-cc02cd0/vllm_lora_exports/gradient_oracle_seed0/adapter-000001-fc61cc8ca79d",
+    "adapter_path_transient": true,
+    "durable_hash_fields": [
+      "state_digest",
+      "adapter_model_sha256"
+    ],
+    "load_inplace": true,
+    "parameter_count": 1089536,
+    "policy_version": "gradient-oracle/seed=0/initial",
+    "prefix_cache_reset": true,
+    "state_digest": "fc61cc8ca79ddb4d1964b2fa12710e983fb76ced22cf848b4ba57f6a1d011089",
+    "version": 1
+  }
+}
