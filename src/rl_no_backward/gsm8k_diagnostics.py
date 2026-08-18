@@ -432,11 +432,14 @@ def run_gsm8k_diagnostics(
     *,
     model_name: str | None = None,
     max_tokens: int = DEFAULT_MAX_TOKENS,
+    directions: int = SEARCH_DIRECTIONS,
 ) -> dict[str, Any]:
     """Run the fixed real-Qwen GSM8K finite-difference diagnostic on CUDA."""
 
     if isinstance(max_tokens, bool) or not isinstance(max_tokens, int) or max_tokens < 1:
         raise ValueError("max_tokens must be a positive integer")
+    if isinstance(directions, bool) or not isinstance(directions, int) or directions < 1:
+        raise ValueError("directions must be a positive integer")
     defaults = GSM8KExperimentConfig()
     selected_model = defaults.model_name if model_name is None else model_name
     if not isinstance(selected_model, str) or not selected_model.strip():
@@ -488,6 +491,8 @@ def run_gsm8k_diagnostics(
     )
 
     center = parameter_vector(bundle).float().clone()
+    if directions > center.numel():
+        raise ValueError("directions cannot exceed the adapter parameter count")
     exact_gradient, surrogate_value, parameters_unchanged = _exact_backprop_grpo_gradient(
         bundle,
         rollout,
@@ -497,7 +502,7 @@ def run_gsm8k_diagnostics(
     generator = torch.Generator(device=bundle.device).manual_seed(DIAGNOSTIC_SEED + 1)
     basis = make_search_basis(
         center.numel(),
-        SEARCH_DIRECTIONS,
+        directions,
         generator,
         bundle.device,
     )
@@ -610,7 +615,7 @@ def run_gsm8k_diagnostics(
         "random_subspace": capture,
         "finite_difference": {
             "mus": FINITE_DIFFERENCE_MUS,
-            "directions": SEARCH_DIRECTIONS,
+            "directions": directions,
             "best_mu_by_projected_relative_l2_error": best_mu,
             "results": finite_difference_results,
         },
@@ -661,6 +666,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_MAX_TOKENS,
         help=f"maximum generated response tokens (default: {DEFAULT_MAX_TOKENS})",
     )
+    parser.add_argument(
+        "--directions",
+        type=_positive_integer,
+        default=SEARCH_DIRECTIONS,
+        help=f"orthonormal search directions (default: {SEARCH_DIRECTIONS})",
+    )
     return parser
 
 
@@ -669,6 +680,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     report = run_gsm8k_diagnostics(
         model_name=arguments.model,
         max_tokens=arguments.max_tokens,
+        directions=arguments.directions,
     )
     output = write_gsm8k_diagnostic_results(arguments.output, report)
     print(output)

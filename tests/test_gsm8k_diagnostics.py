@@ -129,7 +129,7 @@ def test_diagnostic_writer_emits_standard_json(tmp_path: Path) -> None:
     }
 
 
-def test_cli_exposes_output_model_and_max_tokens() -> None:
+def test_cli_exposes_output_model_max_tokens_and_directions() -> None:
     arguments = build_parser().parse_args(
         [
             "--output",
@@ -138,9 +138,12 @@ def test_cli_exposes_output_model_and_max_tokens() -> None:
             "Qwen/Qwen2.5-0.5B-Instruct",
             "--max-tokens",
             "17",
+            "--directions",
+            "8",
         ]
     )
 
     assert arguments.output == Path("result.json")
     assert arguments.model == "Qwen/Qwen2.5-0.5B-Instruct"
     assert arguments.max_tokens == 17
+    assert arguments.directions == 8

@@ -37,13 +37,13 @@ backprop:
   max_grad_norm: 1.0
   scoring_micro_batch_size: 4
 forward:
-  directions: 4
-  finite_difference_mu: 1.0
+  directions: 8
+  finite_difference_mu: 2.0
   fisher_damping: 0.2
   kl_budget: 0.001
   clip_epsilon: 0.2
   max_step_norm: 0.15
   line_search_steps: 10
-  active_rank: 2
+  active_rank: 4
   history_size: 12
   scoring_micro_batch_size: 4
