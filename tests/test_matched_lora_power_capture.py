@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
+import numpy as np
 import pytest
 
 import rl_no_backward.matched_lora_power_capture as power_module
@@ -46,8 +47,8 @@ def _write_json(path: Path, value: object) -> None:
 
 def _request() -> dict[str, object]:
     return {
-        "duration_s": 30.0,
-        "sample_rate_hz": 5_000.0,
+        "duration_s": 16.0,
+        "sample_rate_hz": 18_750.0,
         "pretrigger_s": 0.0,
         "mode": "burst",
         "bits_per_sample": 12,
@@ -59,12 +60,12 @@ def _request() -> dict[str, object]:
 def _resolved() -> dict[str, object]:
     return {
         "mode": "burst",
-        "sample_rate_hz": 5_000.0,
-        "samples": 150_000,
-        "duration_s": 30.0,
+        "sample_rate_hz": 18_750.0,
+        "samples": 300_000,
+        "duration_s": 16.0,
         "pretrigger_samples": 0,
         "raw_sample_rate_hz": 150_000_000.0,
-        "decimation": 30_000,
+        "decimation": 8_000,
         "bits_per_sample": 12,
         "warnings": [],
         "details": {},
@@ -80,7 +81,7 @@ def _sampler_metadata(*, nvml: bool = True) -> dict[str, object]:
         "clock_hz": 150_000_000.0,
         "trigger": "auto",
         "usb_read_mode": "auto",
-        "safe_memory_fraction": 0.65,
+        "safe_memory_fraction": 1.0,
         "resolved": _resolved(),
         "adc_error_controls": {
             "lo_gain_errors_disabled_required": True,
@@ -123,6 +124,16 @@ def _make_trace(root: Path, method: str = "bp_grpo") -> dict[str, object]:
     power_path = root / "channels/power/shard_000000/capture_000000000.npy"
     power_path.parent.mkdir(parents=True)
     power_path.write_bytes(b"NUMPY")
+    timestamp_path = root / "timestamps/nvml.power_w/shard_000000/capture_000000000.npy"
+    timestamp_path.parent.mkdir(parents=True)
+    np.save(
+        timestamp_path,
+        np.asarray([1_000_000_000, 9_000_000_000, 17_000_000_000], dtype=np.int64),
+        allow_pickle=False,
+    )
+    nvml_power_path = root / "channels/nvml.power_w/shard_000000/capture_000000000.npy"
+    nvml_power_path.parent.mkdir(parents=True)
+    np.save(nvml_power_path, np.asarray([80.0, 220.0, 80.0], dtype=np.float32), allow_pickle=False)
     annotations = [
         {
             "name": f"{method}.optimizer.ready",
@@ -160,15 +171,25 @@ def _make_trace(root: Path, method: str = "bp_grpo") -> dict[str, object]:
             "power": {
                 "path": power_path.relative_to(root).as_posix(),
                 "dtype": "float32",
-                "shape": [150_000],
-                "sample_rate_hz": 5_000.0,
+                "shape": [300_000],
+                "sample_rate_hz": 18_750.0,
                 "unit": "normalized_adc",
                 "metadata": {
                     "calibrated": False,
                     "gain_db": 10.0,
                     "bits_per_sample": 12,
                 },
-            }
+            },
+            "nvml.power_w": {
+                "path": nvml_power_path.relative_to(root).as_posix(),
+                "timestamps_path": timestamp_path.relative_to(root).as_posix(),
+                "dtype": "float32",
+                "shape": [3],
+                "sample_rate_hz": 100.0,
+                "unit": "W",
+                "timestamp_clock": "host_monotonic_ns",
+                "metadata": {"clock_domain": "host_monotonic"},
+            },
         },
         "annotations": {
             "path": annotation_path.relative_to(root).as_posix(),
@@ -232,13 +253,13 @@ def test_locked_config_is_exact_and_has_no_eval_or_wandb() -> None:
     assert matched.wandb_mode == "disabled"
     assert matched.run_test_evaluation is False
     assert matched.test_size == 0
-    assert power.duration == "30s"
-    assert power.sample_rate == "5kHz"
+    assert power.duration == "16s"
+    assert power.sample_rate == "18.75kHz"
     assert power.mode == "burst"
     assert power.serial_number == CHIPWHISPERER_SERIAL
     assert power.product_id == 0xACE6
     assert power.clock_hz == 150_000_000.0
-    assert power.safe_memory_fraction == 0.65
+    assert power.safe_memory_fraction == 1.0
     assert power.capture_count == power.max_attempts == 1
     assert power.trigger_delay_s == 1.0
     assert power.nvml_auxiliary is True
@@ -250,7 +271,7 @@ def test_locked_config_is_exact_and_has_no_eval_or_wandb() -> None:
 @pytest.mark.parametrize(
     ("field", "value"),
     [
-        ("duration", "31s"),
+        ("duration", "17s"),
         ("sample_rate", "10kHz"),
         ("mode", "stream"),
         ("max_attempts", 2),
@@ -258,7 +279,7 @@ def test_locked_config_is_exact_and_has_no_eval_or_wandb() -> None:
         ("serial_number", "wrong"),
         ("product_id", 1),
         ("clock_hz", 1.0),
-        ("safe_memory_fraction", 0.5),
+        ("safe_memory_fraction", 0.65),
         ("cuda_annotation_sync", "none"),
         ("sidecapture_commit", "wrong"),
         ("chipwhisperer_commit", "wrong"),
@@ -450,8 +471,8 @@ def test_one_shot_capture_uses_locked_husky_controls_and_annotations(
     assert result["backward_calls"] == 0
     assert len(validations) == 1
     assert state["request"] == {
-        "duration": "30s",
-        "sample_rate": "5kHz",
+        "duration": "16s",
+        "sample_rate": "18.75kHz",
         "mode": "burst",
         "bits_per_sample": 12,
         "gain_db": 10.0,
@@ -492,7 +513,8 @@ def test_trace_validator_binds_exact_hardware_plan_and_method_markers(tmp_path: 
         method="bp_grpo",
         power=PowerCaptureConfig(),
     )
-    assert receipt["resolved_capture"]["samples"] == 150_000
+    assert receipt["resolved_capture"]["samples"] == 300_000
+    assert receipt["nvml_capture_host_span_seconds"] == pytest.approx(16.0)
     assert receipt["primary_channel"]["unit"] == "normalized_adc"
     assert receipt["annotation_count"] == 4
 
@@ -501,7 +523,7 @@ def test_trace_validator_binds_exact_hardware_plan_and_method_markers(tmp_path: 
     ("target", "field", "value", "message"),
     [
         ("manifest", "sample_rate_hz", 4_999.0, "request sample_rate_hz"),
-        ("resolved", "decimation", 29_999, "resolved plan decimation"),
+        ("resolved", "decimation", 7_999, "resolved plan decimation"),
         ("sampler", "product_id", "0x1234", "primary sampler metadata"),
     ],
 )
@@ -528,6 +550,23 @@ def test_trace_validator_rejects_hardware_plan_drift(
         manifest["experiment"]["sampler"] = record["sampler_metadata"]
         _write_json(tmp_path / "manifest.json", manifest)
     with pytest.raises(RuntimeError, match=message):
+        _validate_trace_record(
+            tmp_path,
+            record,
+            method="bp_grpo",
+            power=PowerCaptureConfig(),
+        )
+
+
+def test_trace_validator_rejects_time_compressed_adc_capture(tmp_path: Path) -> None:
+    record = _make_trace(tmp_path)
+    timestamp_path = tmp_path / "timestamps/nvml.power_w/shard_000000/capture_000000000.npy"
+    np.save(
+        timestamp_path,
+        np.asarray([1_000_000_000, 3_000_000_000, 6_400_000_000], dtype=np.int64),
+        allow_pickle=False,
+    )
+    with pytest.raises(RuntimeError, match="completed too early"):
         _validate_trace_record(
             tmp_path,
             record,

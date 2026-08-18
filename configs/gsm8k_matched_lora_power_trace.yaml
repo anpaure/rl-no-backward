@@ -89,8 +89,10 @@ forward:
   scoring_micro_batch_size: 16
 
 power_capture:
-  duration: 30s
-  sample_rate: 5kHz
+  # 150 MHz / 8,000 = 18.75 kHz. The 8,000 divider stays below the Husky's
+  # empirically safe register limit; 300,000 samples fit its 327,828-sample RAM.
+  duration: 16s
+  sample_rate: 18.75kHz
   mode: burst
   bits_per_sample: 12
   gain_db: 10.0
@@ -98,7 +100,7 @@ power_capture:
   serial_number: "50203220325531583230313235303038"
   product_id: 44262
   clock_hz: 150000000.0
-  safe_memory_fraction: 0.65
+  safe_memory_fraction: 1.0
   trigger: auto
   usb_read_mode: auto
   trigger_delay_s: 1.0

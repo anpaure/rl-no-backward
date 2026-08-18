@@ -115,8 +115,8 @@ def _require_exact_number(value: Any, *, name: str, expected: float) -> float:
 class PowerCaptureConfig:
     """Locked settings for the two one-shot physical captures."""
 
-    duration: str = "30s"
-    sample_rate: str = "5kHz"
+    duration: str = "16s"
+    sample_rate: str = "18.75kHz"
     mode: str = "burst"
     bits_per_sample: int = 12
     gain_db: float = 10.0
@@ -124,7 +124,7 @@ class PowerCaptureConfig:
     serial_number: str = CHIPWHISPERER_SERIAL
     product_id: int = 0xACE6
     clock_hz: float = 150_000_000.0
-    safe_memory_fraction: float = 0.65
+    safe_memory_fraction: float = 1.0
     trigger: str = "auto"
     usb_read_mode: str = "auto"
     trigger_delay_s: float = 1.0
@@ -153,8 +153,8 @@ class PowerCaptureConfig:
 
     def __post_init__(self) -> None:
         exact_strings = {
-            "duration": "30s",
-            "sample_rate": "5kHz",
+            "duration": "16s",
+            "sample_rate": "18.75kHz",
             "mode": "burst",
             "channel": "power",
             "serial_number": CHIPWHISPERER_SERIAL,
@@ -190,7 +190,7 @@ class PowerCaptureConfig:
         _require_exact_number(
             self.safe_memory_fraction,
             name="power_capture.safe_memory_fraction",
-            expected=0.65,
+            expected=1.0,
         )
         _require_exact_number(
             self.trigger_delay_s,
@@ -634,12 +634,12 @@ def _capture_optimizer_with_sidecapture(
             resolved_payload = resolved.to_dict()
             expected_plan = {
                 "mode": "burst",
-                "sample_rate_hz": 5_000.0,
-                "samples": 150_000,
-                "duration_s": 30.0,
+                "sample_rate_hz": 18_750.0,
+                "samples": 300_000,
+                "duration_s": 16.0,
                 "pretrigger_samples": 0,
                 "raw_sample_rate_hz": 150_000_000.0,
-                "decimation": 30_000,
+                "decimation": 8_000,
                 "bits_per_sample": 12,
             }
             for name, expected in expected_plan.items():
@@ -844,8 +844,8 @@ def _validate_trace_record(
     if not isinstance(request, Mapping) or not isinstance(resolved, Mapping):
         raise TypeError("SideCapture manifest lacks request/resolved capture plans")
     expected_request = {
-        "duration_s": 30.0,
-        "sample_rate_hz": 5_000.0,
+        "duration_s": 16.0,
+        "sample_rate_hz": 18_750.0,
         "pretrigger_s": 0.0,
         "mode": "burst",
         "bits_per_sample": 12,
@@ -857,12 +857,12 @@ def _validate_trace_record(
             raise RuntimeError(f"SideCapture request {name} is not locked: {request.get(name)!r}")
     expected_resolved = {
         "mode": "burst",
-        "sample_rate_hz": 5_000.0,
-        "samples": 150_000,
-        "duration_s": 30.0,
+        "sample_rate_hz": 18_750.0,
+        "samples": 300_000,
+        "duration_s": 16.0,
         "pretrigger_samples": 0,
         "raw_sample_rate_hz": 150_000_000.0,
-        "decimation": 30_000,
+        "decimation": 8_000,
         "bits_per_sample": 12,
     }
     for name, expected in expected_resolved.items():
@@ -889,6 +889,35 @@ def _validate_trace_record(
     channels = disk_record.get("channels")
     if not isinstance(channels, Mapping) or power.channel not in channels:
         raise RuntimeError("SideCapture record has no ChipWhisperer power channel")
+    nvml_host_span_seconds: float | None = None
+    if power.nvml_auxiliary:
+        nvml_power = channels.get("nvml.power_w")
+        if not isinstance(nvml_power, Mapping):
+            raise RuntimeError("SideCapture record has no timestamped NVML power channel")
+        timestamp_path = _safe_relative_file(
+            trace_root,
+            str(nvml_power.get("timestamps_path")),
+        )
+        import numpy as np
+
+        timestamps = np.load(timestamp_path, allow_pickle=False)
+        if (
+            timestamps.ndim != 1
+            or timestamps.size < 2
+            or timestamps.dtype.kind not in {"i", "u"}
+            or np.any(np.diff(timestamps.astype(np.int64)) <= 0)
+        ):
+            raise RuntimeError("NVML timestamp channel is malformed or non-monotonic")
+        nvml_host_span_seconds = float((int(timestamps[-1]) - int(timestamps[0])) / 1e9)
+        # SideCapture 0.1.1 trusts the ChipWhisperer decimation write.  This
+        # independent host-clock gate catches a silently wrapped/clamped ADC
+        # divider before an apparently healthy but time-compressed trace can
+        # be accepted.
+        if nvml_host_span_seconds < 15.5:
+            raise RuntimeError(
+                "ChipWhisperer capture completed too early for the locked 16-second plan: "
+                f"host span was {nvml_host_span_seconds:.6f} seconds"
+            )
     primary = channels[power.channel]
     if not isinstance(primary, Mapping):
         raise TypeError("SideCapture primary channel descriptor is invalid")
@@ -898,12 +927,12 @@ def _validate_trace_record(
     ):
         raise RuntimeError("ChipWhisperer channel must remain explicitly uncalibrated ADC data")
     if (
-        primary.get("shape") != [150_000]
-        or primary.get("sample_rate_hz") != 5_000.0
+        primary.get("shape") != [300_000]
+        or primary.get("sample_rate_hz") != 18_750.0
         or primary.get("metadata", {}).get("gain_db") != 10.0
         or primary.get("metadata", {}).get("bits_per_sample") != 12
     ):
-        raise RuntimeError("stored ChipWhisperer channel differs from the locked 30s/5kHz plan")
+        raise RuntimeError("stored ChipWhisperer channel differs from the locked 16s/18.75kHz plan")
 
     sampler_metadata = disk_record.get("sampler_metadata")
     if not isinstance(sampler_metadata, Mapping):
@@ -930,7 +959,7 @@ def _validate_trace_record(
         or primary_sampler.get("serial_number") != power.serial_number
         or primary_sampler.get("product_id") != "0xace6"
         or primary_sampler.get("clock_hz") != 150_000_000.0
-        or primary_sampler.get("safe_memory_fraction") != 0.65
+        or primary_sampler.get("safe_memory_fraction") != 1.0
         or primary_sampler.get("resolved") != resolved
     ):
         raise RuntimeError("primary sampler metadata differs from the locked Husky plan")
@@ -999,6 +1028,7 @@ def _validate_trace_record(
         "annotations_sha256": _sha256_file(annotations_path),
         "annotation_count": len(annotations),
         "health": dict(disk_record["health"]),
+        "nvml_capture_host_span_seconds": nvml_host_span_seconds,
     }
 
 
