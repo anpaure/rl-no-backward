@@ -48,8 +48,12 @@ projected_gradient_min_cosine: 0.95
 # against the isolated reverse-mode reference.  Keep a narrow 0.35 gate and
 # report this as a smoothed zeroth-order direction, not an exact derivative.
 projected_gradient_max_relative_l2: 0.35
-minimum_bp_train_accuracy_gain: 0.10
-minimum_bp_dev_accuracy_gain: 0.0
+# The fixed eight-prompt set starts at 7/8 greedy accuracy, so requiring a
+# 10-point gain degenerates into an all-or-nothing perfect-score check.  Use
+# it only to exercise repeated on-policy updates; require learning on the
+# substantially better resolved 256-question development partition instead.
+minimum_bp_train_accuracy_gain: 0.0
+minimum_bp_dev_accuracy_gain: 0.02
 
 expected_lora_parameter_count: 1089536
 shared_initialization_path_template: artifacts/shared_initializations/qwen25_1p5b_qv_r8_all28_seed{seed}.pt
