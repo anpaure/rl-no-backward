@@ -8,7 +8,7 @@ dtype: bfloat16
 device: cuda
 attention_implementation: flash_attention_2
 
-train_size: 8
+train_size: 4
 dev_size: 256
 evaluation_manifest: configs/gsm8k_standard_lora_eval_manifest.json
 dev_source_index_receipt: configs/gsm8k_standard_lora_dev_source_indices.json
@@ -17,7 +17,7 @@ subset_seed: 314159
 methods: [base, bp_grpo, fo_npg]
 seeds: [0]
 steps: 1
-batch_size: 8
+batch_size: 4
 group_size: 8
 schedule_mode: fixed_overfit
 max_prompt_tokens: 256
@@ -89,10 +89,10 @@ forward:
   scoring_micro_batch_size: 16
 
 power_capture:
-  # 150 MHz / 8,000 = 18.75 kHz. The 8,000 divider stays below the Husky's
-  # empirically safe register limit; 300,000 samples fit its 327,828-sample RAM.
-  duration: 16s
-  sample_rate: 18.75kHz
+  # 150 MHz / 7,500 = 20 kHz. The 7,500 divider avoids the high-divider wrap,
+  # and 200,000 samples stay within SideCapture's 213,088-sample safe budget.
+  duration: 10s
+  sample_rate: 20kHz
   mode: burst
   bits_per_sample: 12
   gain_db: 10.0
@@ -100,7 +100,7 @@ power_capture:
   serial_number: "50203220325531583230313235303038"
   product_id: 44262
   clock_hz: 150000000.0
-  safe_memory_fraction: 1.0
+  safe_memory_fraction: 0.65
   trigger: auto
   usb_read_mode: auto
   trigger_delay_s: 1.0
