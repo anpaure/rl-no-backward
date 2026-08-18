@@ -21,6 +21,7 @@ from rl_no_backward.vllm_rollout import (
     ResidualAdapterCoreUpdate,
     ResidualAdapterLayerState,
     ResidualAdapterSnapshot,
+    VLLMGroupedGeneration,
     VLLMResidualCoreAdapter,
     apply_adapter_to_vllm_split_state,
     apply_vllm_adapter_snapshot,
@@ -31,6 +32,7 @@ from rl_no_backward.vllm_rollout import (
     generate_vllm_grouped,
     parse_vllm_greedy_outputs,
     parse_vllm_grouped_outputs,
+    probe_vllm_repeat_determinism,
     sync_vllm_adapter_snapshot,
     vllm_hf_overrides,
 )
@@ -528,9 +530,86 @@ def test_generation_uses_only_explicit_eos_and_retains_terminal_token(
         assert params.skip_special_tokens is False
 
 
+def test_repeat_determinism_probe_compares_same_policy_seed_outputs() -> None:
+    class FakePolicy:
+        policy_version = "method=bp_grpo/seed=0/reset"
+        state_digest = "same-policy-digest"
+
+        def generate(self, prompt_token_ids, **kwargs):
+            assert kwargs["seed"] == 20_001
+            return VLLMGroupedGeneration(
+                prompt_token_ids=prompt_token_ids,
+                response_input_ids=torch.tensor([[[4, 7], [5, 7]]]),
+                response_mask=torch.ones(1, 2, 2, dtype=torch.bool),
+                old_token_log_probs=torch.tensor([[[-0.2, -0.3], [-0.4, -0.5]]]),
+                finish_reasons=(("stop", "stop"),),
+                policy_version=self.policy_version,
+            )
+
+    report = probe_vllm_repeat_determinism(
+        FakePolicy(),  # type: ignore[arg-type]
+        ((1, 2),),
+        group_size=2,
+        max_new_tokens=4,
+        temperature=0.8,
+        seed=20_001,
+        pad_token_id=0,
+        eos_token_ids=(7,),
+    )
+
+    assert report.token_sequences_equal
+    assert report.behavior_logprobs_bitwise_equal
+    assert report.maximum_behavior_logprob_abs_delta == 0.0
+    assert report.first_valid_response_tokens == report.second_valid_response_tokens == 4
+    assert report.fully_repeatable
+
+
+def test_repeat_determinism_probe_exposes_token_count_and_logprob_drift() -> None:
+    class DriftingPolicy:
+        policy_version = "method=fo_npg/seed=0/reset"
+        state_digest = "same-policy-digest"
+        calls = 0
+
+        def generate(self, prompt_token_ids, **_kwargs):
+            self.calls += 1
+            second = self.calls == 2
+            mask = torch.tensor([[[True, True], [True, not second]]])
+            return VLLMGroupedGeneration(
+                prompt_token_ids=prompt_token_ids,
+                response_input_ids=torch.tensor([[[4, 7], [5, 7 if not second else 0]]]),
+                response_mask=mask,
+                old_token_log_probs=torch.tensor(
+                    [[[-0.2, -0.3], [-0.4, -0.5 if not second else 0.0]]]
+                ),
+                finish_reasons=(("stop", "length" if second else "stop"),),
+                policy_version=self.policy_version,
+            )
+
+    report = probe_vllm_repeat_determinism(
+        DriftingPolicy(),  # type: ignore[arg-type]
+        ((1, 2),),
+        group_size=2,
+        max_new_tokens=4,
+        temperature=0.8,
+        seed=20_001,
+        pad_token_id=0,
+        eos_token_ids=(7,),
+    )
+
+    assert not report.token_sequences_equal
+    assert not report.behavior_logprobs_bitwise_equal
+    assert report.maximum_behavior_logprob_abs_delta == pytest.approx(0.5)
+    assert (report.first_valid_response_tokens, report.second_valid_response_tokens) == (4, 3)
+    assert not report.fully_repeatable
+
+
 def test_create_engine_pins_correctness_critical_options(monkeypatch) -> None:
     captured: dict[str, object] = {}
     monkeypatch.delenv("VLLM_ALLOW_INSECURE_SERIALIZATION", raising=False)
+    monkeypatch.delenv("VLLM_BATCH_INVARIANT", raising=False)
+    monkeypatch.delenv("VLLM_ENABLE_V1_MULTIPROCESSING", raising=False)
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.cuda, "get_device_capability", lambda: (9, 0))
 
     class _Registry:
         architectures: ClassVar[set[str]] = set()
@@ -538,6 +617,8 @@ def test_create_engine_pins_correctness_critical_options(monkeypatch) -> None:
         @classmethod
         def get_supported_archs(cls) -> set[str]:
             assert os.environ["VLLM_ALLOW_INSECURE_SERIALIZATION"] == "1"
+            assert os.environ["VLLM_BATCH_INVARIANT"] == "1"
+            assert os.environ["VLLM_ENABLE_V1_MULTIPROCESSING"] == "1"
             return cls.architectures
 
         @staticmethod
@@ -569,6 +650,7 @@ def test_create_engine_pins_correctness_critical_options(monkeypatch) -> None:
         enforce_eager=True,
         flash_attn_version=2,
         allow_insecure_serialization=True,
+        batch_invariant=True,
         disable_log_stats=True,
     )
 
@@ -584,12 +666,38 @@ def test_create_engine_pins_correctness_critical_options(monkeypatch) -> None:
     assert kwargs["hf_overrides"]["residual_core_adapter_layers"] == [2, 3]
     assert kwargs["disable_log_stats"] is True
     assert os.environ["VLLM_ALLOW_INSECURE_SERIALIZATION"] == "1"
+    assert os.environ["VLLM_BATCH_INVARIANT"] == "1"
+    assert os.environ["VLLM_ENABLE_V1_MULTIPROCESSING"] == "1"
+
+
+def test_create_engine_rejects_batch_invariance_on_pre_hopper_gpu(monkeypatch) -> None:
+    monkeypatch.delenv("VLLM_ALLOW_INSECURE_SERIALIZATION", raising=False)
+    monkeypatch.delenv("VLLM_BATCH_INVARIANT", raising=False)
+    monkeypatch.delenv("VLLM_ENABLE_V1_MULTIPROCESSING", raising=False)
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setattr(torch.cuda, "get_device_capability", lambda: (8, 9))
+
+    with pytest.raises(RuntimeError, match="compute capability 9.0"):
+        create_vllm_engine(
+            "Qwen/Qwen2.5-1.5B-Instruct",
+            _snapshot(),
+            revision="abc123",
+            dtype="bfloat16",
+            max_model_len=768,
+            allow_insecure_serialization=True,
+            batch_invariant=True,
+        )
+
+    assert "VLLM_ALLOW_INSECURE_SERIALIZATION" not in os.environ
+    assert "VLLM_BATCH_INVARIANT" not in os.environ
 
 
 def test_create_engine_refuses_implicit_insecure_callable_rpc(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("VLLM_ALLOW_INSECURE_SERIALIZATION", raising=False)
+    monkeypatch.delenv("VLLM_BATCH_INVARIANT", raising=False)
+    monkeypatch.delenv("VLLM_ENABLE_V1_MULTIPROCESSING", raising=False)
 
     with pytest.raises(RuntimeError, match="requires explicit trusted-local"):
         create_vllm_engine(
@@ -601,3 +709,55 @@ def test_create_engine_refuses_implicit_insecure_callable_rpc(
         )
 
     assert "VLLM_ALLOW_INSECURE_SERIALIZATION" not in os.environ
+
+
+def test_create_engine_allows_secure_inprocess_callable_updates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+    monkeypatch.delenv("VLLM_ALLOW_INSECURE_SERIALIZATION", raising=False)
+    monkeypatch.delenv("VLLM_BATCH_INVARIANT", raising=False)
+    monkeypatch.delenv("VLLM_ENABLE_V1_MULTIPROCESSING", raising=False)
+
+    class _Registry:
+        architectures: ClassVar[set[str]] = set()
+
+        @classmethod
+        def get_supported_archs(cls) -> set[str]:
+            assert os.environ["VLLM_ENABLE_V1_MULTIPROCESSING"] == "0"
+            assert "VLLM_ALLOW_INSECURE_SERIALIZATION" not in os.environ
+            return cls.architectures
+
+        @staticmethod
+        def register_model(architecture: str, _qualname: str) -> None:
+            _Registry.architectures.add(architecture)
+
+    def fake_llm(**kwargs):
+        captured["kwargs"] = kwargs
+        return SimpleNamespace(model_config=SimpleNamespace(logprobs_mode="processed_logprobs"))
+
+    fake_vllm = ModuleType("vllm")
+    fake_vllm.__version__ = "0.22.0"
+    fake_vllm.ModelRegistry = _Registry
+    fake_vllm.LLM = fake_llm
+    monkeypatch.setitem(sys.modules, "vllm", fake_vllm)
+    monkeypatch.setattr(
+        "rl_no_backward.vllm_rollout.ensure_vllm_plugin_discoverable",
+        lambda: None,
+    )
+
+    engine = create_vllm_engine(
+        "Qwen/Qwen2.5-1.5B-Instruct",
+        _snapshot(),
+        revision="abc123",
+        dtype="bfloat16",
+        max_model_len=768,
+        allow_insecure_serialization=False,
+        batch_invariant=False,
+        enable_v1_multiprocessing=False,
+    )
+
+    assert engine.model_config.logprobs_mode == "processed_logprobs"
+    assert os.environ["VLLM_ENABLE_V1_MULTIPROCESSING"] == "0"
+    assert "VLLM_ALLOW_INSECURE_SERIALIZATION" not in os.environ
+    assert captured["kwargs"]

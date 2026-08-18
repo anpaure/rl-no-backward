@@ -32,6 +32,7 @@ fi
   --python "$runtime_dir/bin/python" \
   --torch-backend cu130 \
   -e "$project_dir" \
+  'einops==0.8.1' \
   'vllm==0.22.0'
 
 wheel_name='flash_attn-2.8.3+cu130torch2.11-cp312-cp312-linux_x86_64.whl'

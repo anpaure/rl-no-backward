@@ -17,6 +17,7 @@ from rl_no_backward.gsm8k_experiment import (
     _model_runtime_metadata,
     _peak_gpu_memory_metrics,
     _rollout_truncation_fraction,
+    _vllm_process_metadata,
     evaluate_gsm8k,
     run_gsm8k_trial,
     shaped_gsm8k_reward,
@@ -92,6 +93,7 @@ def test_gsm8k_config_validates_benchmark_invariants() -> None:
     assert not config.compile_model_forward
     assert config.compile_model_forward_mode == "default"
     assert config.vllm_allow_insecure_serialization is False
+    assert config.vllm_enable_v1_multiprocessing is True
     assert config.vllm_flash_attn_version == 2
     assert config.vllm_logprob_p99_abs_tolerance == pytest.approx(0.2)
 
@@ -111,6 +113,8 @@ def test_gsm8k_config_validates_benchmark_invariants() -> None:
         GSM8KExperimentConfig(compile_model_forward_mode="unsafe-custom").validate()
     with pytest.raises(TypeError, match="use_frozen_prefix_scoring"):
         GSM8KExperimentConfig(use_frozen_prefix_scoring="yes").validate()  # type: ignore[arg-type]
+    with pytest.raises(TypeError, match="record_rollout_provenance"):
+        GSM8KExperimentConfig(record_rollout_provenance=1).validate()  # type: ignore[arg-type]
 
 
 def test_gsm8k_config_accepts_opt_in_hf_runtime_controls() -> None:
@@ -133,19 +137,36 @@ def test_gsm8k_config_validates_vllm_backend_controls() -> None:
         device="cuda",
         vllm_kv_cache_memory_bytes=1234,
         vllm_enforce_eager=True,
+        vllm_batch_invariant=True,
         vllm_flash_attn_version=2,
         vllm_allow_insecure_serialization=True,
     )
     config.validate()
 
+    inprocess = GSM8KExperimentConfig(
+        rollout_backend="vllm",
+        device="cuda",
+        vllm_enable_v1_multiprocessing=False,
+        vllm_allow_insecure_serialization=False,
+    )
+    inprocess.validate()
+
     with pytest.raises(ValueError, match="rollout_backend"):
         GSM8KExperimentConfig(rollout_backend="other").validate()
     with pytest.raises(ValueError, match="CUDA"):
         GSM8KExperimentConfig(rollout_backend="vllm", device="cpu").validate()
+    with pytest.raises(ValueError, match="requires rollout_backend='vllm'"):
+        GSM8KExperimentConfig(vllm_batch_invariant=True).validate()
+    with pytest.raises(TypeError, match="vllm_batch_invariant"):
+        GSM8KExperimentConfig(vllm_batch_invariant=1).validate()  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="kv_cache"):
         GSM8KExperimentConfig(vllm_kv_cache_memory_bytes=0).validate()
     with pytest.raises(ValueError, match="explicit.*trusted local callable IPC"):
         GSM8KExperimentConfig(rollout_backend="vllm", device="cuda").validate()
+    with pytest.raises(TypeError, match="vllm_enable_v1_multiprocessing"):
+        GSM8KExperimentConfig(
+            vllm_enable_v1_multiprocessing=1  # type: ignore[arg-type]
+        ).validate()
     with pytest.raises(TypeError, match="vllm_allow_insecure_serialization"):
         GSM8KExperimentConfig(
             vllm_allow_insecure_serialization=1  # type: ignore[arg-type]
@@ -395,6 +416,40 @@ def test_model_runtime_metadata_records_requested_and_effective_controls(
     }
 
 
+def test_vllm_process_metadata_distinguishes_worker_and_inprocess_memory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    key = "VLLM_ENABLE_V1_MULTIPROCESSING"
+
+    monkeypatch.setenv(key, "1")
+    multiprocessing = _vllm_process_metadata(
+        GSM8KExperimentConfig(vllm_enable_v1_multiprocessing=True),
+        active=True,
+    )
+    assert multiprocessing == {
+        "gpu_memory_metric_scope": "hugging_face_trainer_process_torch_allocator",
+        "gpu_memory_metrics_exclude_vllm_worker": True,
+        "vllm_enable_v1_multiprocessing": True,
+        "vllm_enable_v1_multiprocessing_env": "1",
+        "vllm_engine_process_mode": "multiprocess",
+        "vllm_inprocess_global_rng_caveat": None,
+    }
+
+    monkeypatch.setenv(key, "0")
+    inprocess = _vllm_process_metadata(
+        GSM8KExperimentConfig(vllm_enable_v1_multiprocessing=False),
+        active=True,
+    )
+    assert inprocess["gpu_memory_metric_scope"] == (
+        "single_process_hugging_face_and_vllm_torch_allocator"
+    )
+    assert inprocess["gpu_memory_metrics_exclude_vllm_worker"] is False
+    assert inprocess["vllm_enable_v1_multiprocessing"] is False
+    assert inprocess["vllm_enable_v1_multiprocessing_env"] == "0"
+    assert inprocess["vllm_engine_process_mode"] == "in_process"
+    assert "global random seed" in inprocess["vllm_inprocess_global_rng_caveat"]
+
+
 def test_gsm8k_config_validates_opt_in_fast_paths() -> None:
     config = GSM8KExperimentConfig.from_mapping(
         {
@@ -464,11 +519,15 @@ def test_trial_records_synchronised_phase_and_memory_telemetry(
     )
     rollout = SimpleNamespace(
         completions=(("Final answer: 10", "Final answer: 9"),),
+        prompt_input_ids=torch.tensor([[1, 3]]),
+        prompt_attention_mask=torch.ones(1, 2, dtype=torch.bool),
         environment_samples=2,
         valid_response_tokens=4,
         rewards=torch.tensor([[1.0, 0.0]]),
         response_lengths=torch.tensor([[2, 2]]),
         response_input_ids=torch.tensor([[[3, 2], [4, 2]]]),
+        response_mask=torch.ones(1, 2, 2, dtype=torch.bool),
+        old_token_log_probs=torch.tensor([[[-0.2, -0.3], [-0.4, -0.5]]]),
     )
     result = ForwardSequenceStepResult(
         accepted=True,
@@ -507,6 +566,7 @@ def test_trial_records_synchronised_phase_and_memory_telemetry(
         scoring_micro_batch_size=2,
         eval_interval=1,
         wandb_mode="disabled",
+        record_rollout_provenance=True,
         forward={"directions": 1},
     )
 
@@ -530,6 +590,12 @@ def test_trial_records_synchronised_phase_and_memory_telemetry(
     assert initial["evaluation_seconds"] == pytest.approx(0.123)
     assert train["rollout_and_old_score_seconds"] >= 0
     assert train["optimizer_seconds"] >= 0
+    assert train["rollout_seed"] == 20_001
+    assert train["rollout_provenance_version"] == "rl-no-backward-rollout-v1"
+    assert train["rollout_digest_algorithm"] == "sha256"
+    for key in ("rollout_token_digest", "behavior_logprob_digest", "rollout_digest"):
+        assert len(train[key]) == 64
+        int(train[key], 16)
     assert train["full_prefix_calls"] == train["forward_calls"]
     assert train["suffix_calls"] == train["forward_calls"]
     assert evaluation["evaluation_seconds"] >= 0

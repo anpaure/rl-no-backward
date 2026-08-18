@@ -17,9 +17,11 @@ config embedded in ``metadata.json`` is used.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import re
+import struct
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -83,6 +85,9 @@ _BACKPROP_METHODS = {
     "backprop",
     "backprop_grpo",
 }
+_ROLLOUT_PROVENANCE_VERSION = "rl-no-backward-rollout-v1"
+_ROLLOUT_DIGEST_ALGORITHM = "sha256"
+_SHA256_HEX = re.compile(r"[0-9a-f]{64}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -239,6 +244,40 @@ def _normalise_config(config: Mapping[str, Any], issues: _Issues) -> dict[str, A
     if wandb_mode != "offline":
         issues.invalid("config.wandb_mode must be 'offline' for a publishable offline-run bundle")
 
+    record_rollout_provenance = config.get("record_rollout_provenance", False)
+    if not isinstance(record_rollout_provenance, bool):
+        issues.invalid("config.record_rollout_provenance must be boolean")
+        return None
+    vllm_batch_invariant = config.get("vllm_batch_invariant", False)
+    if not isinstance(vllm_batch_invariant, bool):
+        issues.invalid("config.vllm_batch_invariant must be boolean")
+        return None
+    if vllm_batch_invariant and config.get("rollout_backend") != "vllm":
+        issues.invalid("config.vllm_batch_invariant=true requires rollout_backend='vllm'")
+        return None
+    vllm_enable_v1_multiprocessing = config.get(
+        "vllm_enable_v1_multiprocessing", True
+    )
+    if not isinstance(vllm_enable_v1_multiprocessing, bool):
+        issues.invalid("config.vllm_enable_v1_multiprocessing must be boolean")
+        return None
+    vllm_allow_insecure_serialization = config.get(
+        "vllm_allow_insecure_serialization", False
+    )
+    if not isinstance(vllm_allow_insecure_serialization, bool):
+        issues.invalid("config.vllm_allow_insecure_serialization must be boolean")
+        return None
+    if (
+        config.get("rollout_backend") == "vllm"
+        and vllm_enable_v1_multiprocessing
+        and not vllm_allow_insecure_serialization
+    ):
+        issues.invalid(
+            "multiprocess mutable vLLM artifacts require explicit trusted-local "
+            "callable serialization opt-in"
+        )
+        return None
+
     return {
         **dict(config),
         "methods": clean_methods,
@@ -246,6 +285,10 @@ def _normalise_config(config: Mapping[str, Any], issues: _Issues) -> dict[str, A
         **numeric,
         "run_test_evaluation": run_test,
         "test_size": test_size,
+        "record_rollout_provenance": record_rollout_provenance,
+        "vllm_batch_invariant": vllm_batch_invariant,
+        "vllm_enable_v1_multiprocessing": vllm_enable_v1_multiprocessing,
+        "vllm_allow_insecure_serialization": vllm_allow_insecure_serialization,
     }
 
 
@@ -525,6 +568,71 @@ def _last_numeric(records: Sequence[Mapping[str, Any]], key: str) -> float | Non
     return None
 
 
+def _validate_rollout_provenance(
+    train_records: Sequence[Mapping[str, Any]],
+    run: ExpectedRun,
+    config: Mapping[str, Any],
+    issues: _Issues,
+) -> None:
+    """Require the opt-in cryptographic identity on every fixed rollout."""
+
+    if not config["record_rollout_provenance"]:
+        return
+    observed_digests: set[str] = set()
+    for index, record in enumerate(train_records, start=1):
+        label = f"{run.label} train-step record {index}"
+        if record.get("rollout_provenance_version") != _ROLLOUT_PROVENANCE_VERSION:
+            issues.invalid(
+                f"{label} must preserve rollout_provenance_version="
+                f"{_ROLLOUT_PROVENANCE_VERSION!r}"
+            )
+        if record.get("rollout_digest_algorithm") != _ROLLOUT_DIGEST_ALGORITHM:
+            issues.invalid(
+                f"{label} must preserve rollout_digest_algorithm="
+                f"{_ROLLOUT_DIGEST_ALGORITHM!r}"
+            )
+        step = record.get("step")
+        rollout_seed = record.get("rollout_seed")
+        if isinstance(step, bool) or not isinstance(step, int):
+            issues.invalid(f"{label} has no integer step for rollout-seed verification")
+        else:
+            expected_seed = 20_000 + run.seed * 1_000 + step
+            if rollout_seed != expected_seed:
+                issues.invalid(
+                    f"{label} rollout_seed {rollout_seed!r} does not match "
+                    f"the deterministic scheduled seed {expected_seed}"
+                )
+        valid_digests: dict[str, str] = {}
+        for key in (
+            "rollout_token_digest",
+            "behavior_logprob_digest",
+            "rollout_digest",
+        ):
+            value = record.get(key)
+            if not isinstance(value, str) or _SHA256_HEX.fullmatch(value) is None:
+                issues.invalid(f"{label} {key} is not a lowercase SHA-256 digest")
+            else:
+                valid_digests[key] = value
+        if (
+            isinstance(rollout_seed, int)
+            and not isinstance(rollout_seed, bool)
+            and rollout_seed >= 0
+            and len(valid_digests) == 3
+        ):
+            combined = hashlib.sha256()
+            combined.update(f"{_ROLLOUT_PROVENANCE_VERSION}/combined\0".encode("ascii"))
+            combined.update(struct.pack("<Q", rollout_seed))
+            combined.update(bytes.fromhex(valid_digests["rollout_token_digest"]))
+            combined.update(bytes.fromhex(valid_digests["behavior_logprob_digest"]))
+            if valid_digests["rollout_digest"] != combined.hexdigest():
+                issues.invalid(f"{label} rollout_digest does not bind its seed and component digests")
+        combined = record.get("rollout_digest")
+        if isinstance(combined, str) and _SHA256_HEX.fullmatch(combined):
+            if combined in observed_digests:
+                issues.invalid(f"{label} repeats an earlier rollout_digest despite a new seed")
+            observed_digests.add(combined)
+
+
 def _validate_run_records(
     records: Sequence[Mapping[str, Any]],
     run: ExpectedRun,
@@ -552,6 +660,8 @@ def _validate_run_records(
     )
     if unknown_kinds:
         issues.invalid(f"{run.label} has unsupported record kinds: {unknown_kinds}")
+
+    _validate_rollout_provenance(train_records, run, config, issues)
 
     expected_train = 0 if run.is_base else int(config["steps"])
     if len(train_records) < expected_train:
@@ -690,12 +800,28 @@ def _compare_embedded_config(
         "run_test_evaluation",
         "test_size",
         "wandb_mode",
+        "record_rollout_provenance",
+        "vllm_batch_invariant",
+        "vllm_enable_v1_multiprocessing",
+        "vllm_allow_insecure_serialization",
     )
     mismatches = [
         key
         for key in keys
         if key in embedded and key in external and embedded[key] != external[key]
     ]
+    defaults = {
+        "record_rollout_provenance": False,
+        "vllm_batch_invariant": False,
+        "vllm_enable_v1_multiprocessing": True,
+        "vllm_allow_insecure_serialization": False,
+    }
+    for defaulted_key, default in defaults.items():
+        if (
+            embedded.get(defaulted_key, default) != external.get(defaulted_key, default)
+            and defaulted_key not in mismatches
+        ):
+            mismatches.append(defaulted_key)
     if mismatches:
         issues.invalid(f"external config disagrees with metadata.config for keys: {mismatches}")
 

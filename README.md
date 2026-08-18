@@ -85,8 +85,8 @@ FlashAttention from source:
 ```bash
 ./scripts/install_h100_fastpath.sh
 PYTHONPATH=src .venv-vllm/bin/python -m rl_no_backward.cli gsm8k \
-  --config configs/gsm8k_optimized_gate.yaml \
-  --output artifacts/gates/vllm_eager
+  --config configs/gsm8k_optimized_final.yaml \
+  --output artifacts/final_gsm8k_optimized
 ```
 
 The optimized trainer can cache the frozen first 24 Qwen blocks once per
@@ -95,6 +95,19 @@ scoring, BP updates, forward-only probes, and line search. It also asks Qwen's
 LM head to materialize logits only at response-prediction positions. Both
 fast paths are opt-in and fall back with explicit telemetry when the model
 structure is unsupported.
+
+The headline config uses vLLM's deterministic in-process scheduler, preserving
+the fast FlashAttention-2/CUDA-graph kernels while removing multiprocessing
+request-order drift. Every training rollout also carries SHA-256 identities for
+its tokens, masks, behavior log probabilities, and sampling seed. HF/vLLM
+behavior-policy agreement is tolerance-gated at the mean, p99, and maximum
+token-log-probability levels rather than requiring bitwise equality across the
+two different inference implementations. vLLM's optional batch-invariant
+kernels remain supported, but are disabled in the headline config because the
+H100 gate measured a substantial throughput penalty. See the official
+[vLLM reproducibility](https://docs.vllm.ai/en/v0.22.0/usage/reproducibility/)
+and [batch-invariance](https://docs.vllm.ai/en/v0.22.0/features/batch_invariance/)
+notes for that tradeoff.
 
 On an H100 host that already provides a compatible CUDA PyTorch build, a
 system-site-packages environment avoids downloading another multi-gigabyte
@@ -111,7 +124,8 @@ Run the real-model numerical audit separately:
 
 ```bash
 uv run python -m rl_no_backward.gsm8k_diagnostics \
-  --output artifacts/diagnostics/gsm8k_fd.json --max-tokens 512 --directions 8
+  --output artifacts/diagnostics/optimized_hf_exact/gsm8k_fd.json \
+  --max-tokens 512 --directions 8 --frozen-prefix-scoring
 ```
 
 ## W&B and raw evidence
@@ -121,7 +135,7 @@ offline mode by default so credentials are never assumed on a shared machine.
 After authenticating to the intended entity, upload them with:
 
 ```bash
-wandb sync artifacts/final_gsm8k/wandb/offline-run-*
+wandb sync artifacts/final_gsm8k_optimized/wandb/offline-run-*
 ```
 
 Append-only JSONL is the plotting source of truth, so all figures can be

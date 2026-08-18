@@ -34,6 +34,8 @@ from .model import ModelBundle, ResidualCoreAdapter, _decoder_layers
 from .vllm_plugin import (
     VLLM_RESIDUAL_ARCHITECTURE,
     configure_trusted_vllm_callable_serialization,
+    configure_vllm_batch_invariance,
+    configure_vllm_v1_multiprocessing,
     ensure_vllm_plugin_discoverable,
     register_residual_qwen_model,
 )
@@ -272,6 +274,29 @@ class VLLMGroupedGeneration:
     @property
     def valid_response_tokens(self) -> int:
         return int(self.response_mask.sum().item())
+
+
+@dataclass(frozen=True, slots=True)
+class VLLMRepeatDeterminismReport:
+    """Exact repeatability evidence for two same-policy, same-seed requests."""
+
+    policy_version: str
+    policy_state_digest: str
+    seed: int
+    response_input_ids_equal: bool
+    response_masks_equal: bool
+    behavior_logprobs_bitwise_equal: bool
+    maximum_behavior_logprob_abs_delta: float | None
+    first_valid_response_tokens: int
+    second_valid_response_tokens: int
+
+    @property
+    def token_sequences_equal(self) -> bool:
+        return self.response_input_ids_equal and self.response_masks_equal
+
+    @property
+    def fully_repeatable(self) -> bool:
+        return self.token_sequences_equal and self.behavior_logprobs_bitwise_equal
 
 
 @dataclass(frozen=True, slots=True)
@@ -890,6 +915,8 @@ def create_vllm_engine(
     enforce_eager: bool = True,
     flash_attn_version: int = 2,
     allow_insecure_serialization: bool = False,
+    batch_invariant: bool = False,
+    enable_v1_multiprocessing: bool = True,
     seed: int = 0,
     **engine_overrides: Any,
 ) -> Any:
@@ -907,14 +934,34 @@ def create_vllm_engine(
         or flash_attn_version not in {2, 3}
     ):
         raise ValueError("flash_attn_version must be 2 or 3")
+    if not isinstance(batch_invariant, bool):
+        raise TypeError("batch_invariant must be boolean")
+    if not isinstance(enable_v1_multiprocessing, bool):
+        raise TypeError("enable_v1_multiprocessing must be boolean")
+    if batch_invariant:
+        if not torch.cuda.is_available():
+            raise RuntimeError("vLLM batch invariance requires an NVIDIA CUDA GPU")
+        capability = torch.cuda.get_device_capability()
+        if capability < (9, 0):
+            raise RuntimeError(
+                "vLLM 0.22 batch invariance requires compute capability 9.0 or newer; "
+                f"found {capability[0]}.{capability[1]}"
+            )
+    # Process mode and the related environment controls must be fixed before
+    # plugin discovery imports vLLM.  In multiprocess mode, apply_model sends a
+    # Python callable over local IPC and therefore requires the explicit
+    # insecure-serialization opt-in.  The in-process client calls it directly.
+    configure_vllm_v1_multiprocessing(enabled=enable_v1_multiprocessing)
+    configure_vllm_batch_invariance(enabled=batch_invariant)
     configure_trusted_vllm_callable_serialization(
         enabled=allow_insecure_serialization,
     )
-    if not allow_insecure_serialization:
+    if enable_v1_multiprocessing and not allow_insecure_serialization:
         raise RuntimeError(
-            "the mutable residual-core vLLM backend requires explicit trusted-local "
-            "callable serialization; set vllm_allow_insecure_serialization=true only "
-            "when EngineCore and workers are local trusted processes"
+            "the multiprocess mutable residual-core vLLM backend requires explicit "
+            "trusted-local callable serialization; set "
+            "vllm_allow_insecure_serialization=true only when EngineCore and workers "
+            "are local trusted processes, or disable V1 multiprocessing"
         )
     reserved = {
         "attention_config",
@@ -1041,6 +1088,82 @@ class OnPolicyVLLMGenerator:
         )
 
 
+@torch.inference_mode()
+def probe_vllm_repeat_determinism(
+    rollout_policy: OnPolicyVLLMGenerator,
+    prompt_token_ids: tuple[tuple[int, ...], ...],
+    *,
+    group_size: int,
+    max_new_tokens: int,
+    temperature: float,
+    seed: int,
+    pad_token_id: int,
+    eos_token_ids: tuple[int, ...],
+    device: torch.device | str = "cpu",
+) -> VLLMRepeatDeterminismReport:
+    """Generate twice without an update and compare every sampled tensor.
+
+    This is an explicit diagnostic rather than a training-path assertion: it
+    spends two rollout batches and advances vLLM's internal request counter,
+    but it neither updates nor resynchronizes the policy.  A common seed only
+    predicts equal output while the policy and prompt batch are also equal;
+    normal method-specific optimizer updates invalidate that comparison.
+
+    CUDA graph replay should not intentionally alter the per-request sampling
+    seed.  If the first optimizer-step rollout differs across matched methods,
+    this probe distinguishes engine-level repeatability from stale policy
+    synchronization, prompt-order differences, or method updates.
+    """
+
+    policy_version = rollout_policy.policy_version
+    policy_state_digest = rollout_policy.state_digest
+    if policy_version is None or policy_state_digest is None:
+        raise RuntimeError("repeat determinism probing requires a synchronized vLLM policy")
+    generation_kwargs = {
+        "group_size": group_size,
+        "max_new_tokens": max_new_tokens,
+        "temperature": temperature,
+        "seed": seed,
+        "pad_token_id": pad_token_id,
+        "eos_token_ids": eos_token_ids,
+        "device": device,
+    }
+    first = rollout_policy.generate(prompt_token_ids, **generation_kwargs)
+    second = rollout_policy.generate(prompt_token_ids, **generation_kwargs)
+    if (
+        first.policy_version != policy_version
+        or second.policy_version != policy_version
+        or rollout_policy.policy_version != policy_version
+        or rollout_policy.state_digest != policy_state_digest
+    ):
+        raise RuntimeError("vLLM policy identity changed during repeat determinism probing")
+
+    first_ids = first.response_input_ids.detach().cpu()
+    second_ids = second.response_input_ids.detach().cpu()
+    first_mask = first.response_mask.detach().cpu()
+    second_mask = second.response_mask.detach().cpu()
+    first_logprobs = first.old_token_log_probs.detach().float().cpu()
+    second_logprobs = second.old_token_log_probs.detach().float().cpu()
+    ids_equal = torch.equal(first_ids, second_ids)
+    masks_equal = torch.equal(first_mask, second_mask)
+    logprobs_equal = torch.equal(first_logprobs, second_logprobs)
+    if first_logprobs.shape == second_logprobs.shape:
+        maximum_delta = float((first_logprobs - second_logprobs).abs().max().item())
+    else:
+        maximum_delta = None
+    return VLLMRepeatDeterminismReport(
+        policy_version=policy_version,
+        policy_state_digest=policy_state_digest,
+        seed=seed,
+        response_input_ids_equal=ids_equal,
+        response_masks_equal=masks_equal,
+        behavior_logprobs_bitwise_equal=logprobs_equal,
+        maximum_behavior_logprob_abs_delta=maximum_delta,
+        first_valid_response_tokens=first.valid_response_tokens,
+        second_valid_response_tokens=second.valid_response_tokens,
+    )
+
+
 def register_vllm_residual_qwen_model() -> None:
     """Backward-compatible direct registration for callers outside the runner."""
 
@@ -1056,6 +1179,7 @@ __all__ = [
     "ResidualAdapterSnapshot",
     "VLLMGreedyGeneration",
     "VLLMGroupedGeneration",
+    "VLLMRepeatDeterminismReport",
     "VLLMResidualCoreAdapter",
     "apply_adapter_to_vllm_split_state",
     "apply_vllm_adapter_snapshot",
@@ -1066,6 +1190,7 @@ __all__ = [
     "generate_vllm_grouped",
     "parse_vllm_greedy_outputs",
     "parse_vllm_grouped_outputs",
+    "probe_vllm_repeat_determinism",
     "register_vllm_residual_qwen_model",
     "sync_vllm_adapter_snapshot",
     "vllm_hf_overrides",

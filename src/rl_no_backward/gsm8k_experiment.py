@@ -43,6 +43,7 @@ from .model import (
     set_adapter_grad_enabled,
     set_parameter_vector,
 )
+from .rollout_provenance import build_rollout_provenance
 from .sequence_optimizers import (
     BackpropSequenceConfig,
     ForwardSequenceConfig,
@@ -65,6 +66,7 @@ from .sequence_policy import (
     teacher_forced_token_log_probs,
 )
 from .task import CANDIDATE_ACTIONS
+from .vllm_plugin import VLLM_V1_MULTIPROCESSING_ENV
 from .vllm_rollout import (
     OnPolicyVLLMGenerator,
     capture_residual_adapter_snapshot,
@@ -108,6 +110,7 @@ class GSM8KExperimentConfig:
     sampling_temperature: float = 0.8
     scoring_micro_batch_size: int = 4
     use_frozen_prefix_scoring: bool = False
+    record_rollout_provenance: bool = False
     eval_interval: int = 10
     eval_batch_size: int = 4
     numeric_shaping_weight: float = 0.1
@@ -118,6 +121,8 @@ class GSM8KExperimentConfig:
     rollout_backend: str = "hf"
     vllm_kv_cache_memory_bytes: int = 2 * 1024**3
     vllm_enforce_eager: bool = True
+    vllm_batch_invariant: bool = False
+    vllm_enable_v1_multiprocessing: bool = True
     vllm_flash_attn_version: int = 2
     vllm_allow_insecure_serialization: bool = False
     vllm_logprob_mean_abs_tolerance: float = 0.02
@@ -170,6 +175,8 @@ class GSM8KExperimentConfig:
             raise ValueError("sampling_temperature must be positive")
         if not isinstance(self.use_frozen_prefix_scoring, bool):
             raise TypeError("use_frozen_prefix_scoring must be boolean")
+        if not isinstance(self.record_rollout_provenance, bool):
+            raise TypeError("record_rollout_provenance must be boolean")
         if self.wandb_mode not in {"online", "offline", "disabled"}:
             raise ValueError("wandb_mode must be online, offline, or disabled")
         if self.rollout_backend not in {"hf", "vllm"}:
@@ -184,6 +191,12 @@ class GSM8KExperimentConfig:
             raise ValueError("vllm_kv_cache_memory_bytes must be a positive integer")
         if not isinstance(self.vllm_enforce_eager, bool):
             raise TypeError("vllm_enforce_eager must be boolean")
+        if not isinstance(self.vllm_batch_invariant, bool):
+            raise TypeError("vllm_batch_invariant must be boolean")
+        if self.vllm_batch_invariant and self.rollout_backend != "vllm":
+            raise ValueError("vllm_batch_invariant=true requires rollout_backend='vllm'")
+        if not isinstance(self.vllm_enable_v1_multiprocessing, bool):
+            raise TypeError("vllm_enable_v1_multiprocessing must be boolean")
         if (
             isinstance(self.vllm_flash_attn_version, bool)
             or not isinstance(self.vllm_flash_attn_version, int)
@@ -192,9 +205,13 @@ class GSM8KExperimentConfig:
             raise ValueError("vllm_flash_attn_version must be 2 or 3")
         if not isinstance(self.vllm_allow_insecure_serialization, bool):
             raise TypeError("vllm_allow_insecure_serialization must be boolean")
-        if self.rollout_backend == "vllm" and not self.vllm_allow_insecure_serialization:
+        if (
+            self.rollout_backend == "vllm"
+            and self.vllm_enable_v1_multiprocessing
+            and not self.vllm_allow_insecure_serialization
+        ):
             raise ValueError(
-                "the mutable vLLM rollout backend requires explicit "
+                "the multiprocess mutable vLLM rollout backend requires explicit "
                 "vllm_allow_insecure_serialization=true for trusted local callable IPC"
             )
         for name in (
@@ -255,6 +272,53 @@ def _model_runtime_metadata(
         "compile_model_forward": config.compile_model_forward,
         "compile_model_forward_mode": config.compile_model_forward_mode,
         "model_forward_compiled": model_forward_is_compiled(bundle.model),
+    }
+
+
+def _vllm_process_metadata(
+    config: GSM8KExperimentConfig,
+    *,
+    active: bool,
+) -> dict[str, Any]:
+    """Describe process-local memory scope and RNG behavior for vLLM."""
+
+    if not active:
+        return {
+            "gpu_memory_metric_scope": "hugging_face_trainer_process_torch_allocator",
+            "gpu_memory_metrics_exclude_vllm_worker": False,
+            "vllm_enable_v1_multiprocessing": config.vllm_enable_v1_multiprocessing,
+            "vllm_enable_v1_multiprocessing_env": os.environ.get(
+                VLLM_V1_MULTIPROCESSING_ENV
+            ),
+            "vllm_engine_process_mode": None,
+            "vllm_inprocess_global_rng_caveat": None,
+        }
+    if config.vllm_enable_v1_multiprocessing:
+        return {
+            "gpu_memory_metric_scope": "hugging_face_trainer_process_torch_allocator",
+            "gpu_memory_metrics_exclude_vllm_worker": True,
+            "vllm_enable_v1_multiprocessing": True,
+            "vllm_enable_v1_multiprocessing_env": os.environ.get(
+                VLLM_V1_MULTIPROCESSING_ENV
+            ),
+            "vllm_engine_process_mode": "multiprocess",
+            "vllm_inprocess_global_rng_caveat": None,
+        }
+    return {
+        "gpu_memory_metric_scope": (
+            "single_process_hugging_face_and_vllm_torch_allocator"
+        ),
+        "gpu_memory_metrics_exclude_vllm_worker": False,
+        "vllm_enable_v1_multiprocessing": False,
+        "vllm_enable_v1_multiprocessing_env": os.environ.get(
+            VLLM_V1_MULTIPROCESSING_ENV
+        ),
+        "vllm_engine_process_mode": "in_process",
+        "vllm_inprocess_global_rng_caveat": (
+            "vLLM 0.22 sets the process-global random seed when V1 multiprocessing "
+            "is disabled; benchmark sampling, example selection, and probe directions "
+            "use explicit seeds, but unrelated global RNG consumers may be affected"
+        ),
     }
 
 
@@ -986,6 +1050,11 @@ def run_gsm8k_trial(
                 rollout_policy,
                 seed=rollout_seed,
             )
+        rollout_provenance_fields = (
+            build_rollout_provenance(rollout, seed=rollout_seed).as_record_fields()
+            if config.record_rollout_provenance
+            else {}
+        )
         _sync(bundle.device)
         rollout_and_old_score_seconds = time.perf_counter() - rollout_start
         rollout_exact_reward, exact_zero_advantage_fraction = _exact_rollout_metrics(
@@ -1063,6 +1132,7 @@ def run_gsm8k_trial(
             "frozen_prefix_fallback_reason": getattr(
                 rollout, "frozen_prefix_fallback_reason", None
             ),
+            **rollout_provenance_fields,
             **behavior_policy_fields,
             **next_policy_fields,
             **_peak_gpu_memory_metrics(bundle.device),
@@ -1285,6 +1355,8 @@ def run_gsm8k_benchmark(
             max_model_len=config.max_prompt_tokens + config.max_new_tokens,
             kv_cache_memory_bytes=config.vllm_kv_cache_memory_bytes,
             enforce_eager=config.vllm_enforce_eager,
+            batch_invariant=config.vllm_batch_invariant,
+            enable_v1_multiprocessing=config.vllm_enable_v1_multiprocessing,
             flash_attn_version=config.vllm_flash_attn_version,
             allow_insecure_serialization=config.vllm_allow_insecure_serialization,
             seed=config.subset_seed,
@@ -1338,16 +1410,23 @@ def run_gsm8k_benchmark(
             if rollout_policy is not None
             else "hf_teacher_forced_rescore"
         ),
-        # CUDA allocator peaks are process-local.  A vLLM worker owns its own
-        # allocator, so these metrics compare trainer costs but do not claim to
-        # be whole-device peaks when the optional backend is active.
-        "gpu_memory_metric_scope": "hugging_face_trainer_process_torch_allocator",
-        "gpu_memory_metrics_exclude_vllm_worker": rollout_policy is not None,
+        **_vllm_process_metadata(config, active=rollout_policy is not None),
         "vllm_version": vllm_version,
+        "vllm_batch_invariant": config.vllm_batch_invariant,
+        "vllm_batch_invariant_env": os.environ.get("VLLM_BATCH_INVARIANT"),
+        "vllm_batch_invariant_performance_caveat": (
+            "beta deterministic kernels may reduce throughput; measure on the locked H100 run"
+            if config.vllm_batch_invariant
+            else None
+        ),
         "vllm_flash_attn_version": config.vllm_flash_attn_version,
         "vllm_allow_insecure_serialization": config.vllm_allow_insecure_serialization,
         "vllm_insecure_serialization_scope": (
-            "trusted_local_enginecore_worker_callable_ipc"
+            (
+                "trusted_local_enginecore_worker_callable_ipc"
+                if config.vllm_enable_v1_multiprocessing
+                else "trusted_local_inprocess_direct_call_no_serialization_required"
+            )
             if config.vllm_allow_insecure_serialization
             else None
         ),

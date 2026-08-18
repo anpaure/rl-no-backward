@@ -98,3 +98,54 @@ def test_trusted_callable_serialization_is_explicit_and_contradiction_safe(
     monkeypatch.setenv(key, "true")
     with pytest.raises(RuntimeError, match="exactly '0' or '1'"):
         plugin.configure_trusted_vllm_callable_serialization(enabled=True)
+
+
+def test_batch_invariance_is_explicit_and_contradiction_safe(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    key = plugin.VLLM_BATCH_INVARIANT_ENV
+    monkeypatch.delenv(key, raising=False)
+
+    plugin.configure_vllm_batch_invariance(enabled=False)
+    assert key not in os.environ
+
+    plugin.configure_vllm_batch_invariance(enabled=True)
+    assert os.environ[key] == "1"
+
+    monkeypatch.setenv(key, "0")
+    with pytest.raises(RuntimeError, match="explicitly disables"):
+        plugin.configure_vllm_batch_invariance(enabled=True)
+
+    monkeypatch.setenv(key, "1")
+    with pytest.raises(RuntimeError, match="conflicts with the default-off"):
+        plugin.configure_vllm_batch_invariance(enabled=False)
+
+    monkeypatch.setenv(key, "true")
+    with pytest.raises(RuntimeError, match="exactly '0' or '1'"):
+        plugin.configure_vllm_batch_invariance(enabled=True)
+
+
+def test_v1_multiprocessing_is_explicit_and_contradiction_safe(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    key = plugin.VLLM_V1_MULTIPROCESSING_ENV
+    monkeypatch.delenv(key, raising=False)
+
+    plugin.configure_vllm_v1_multiprocessing(enabled=False)
+    assert os.environ[key] == "0"
+
+    monkeypatch.setenv(key, "1")
+    with pytest.raises(RuntimeError, match="conflicts with"):
+        plugin.configure_vllm_v1_multiprocessing(enabled=False)
+
+    monkeypatch.setenv(key, "0")
+    with pytest.raises(RuntimeError, match="conflicts with"):
+        plugin.configure_vllm_v1_multiprocessing(enabled=True)
+
+    monkeypatch.setenv(key, "true")
+    with pytest.raises(RuntimeError, match="exactly '0' or '1'"):
+        plugin.configure_vllm_v1_multiprocessing(enabled=True)
+
+    monkeypatch.delenv(key)
+    plugin.configure_vllm_v1_multiprocessing(enabled=True)
+    assert os.environ[key] == "1"

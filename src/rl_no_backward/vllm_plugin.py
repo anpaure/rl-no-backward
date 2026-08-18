@@ -19,6 +19,8 @@ VLLM_RESIDUAL_ARCHITECTURE = "ResidualCoreQwen2ForCausalLM"
 VLLM_MODEL_QUALNAME = "rl_no_backward.vllm_qwen_model:ResidualCoreQwen2ForCausalLM"
 VLLM_PLUGIN_ENTRY_POINT = "rl_no_backward.vllm_plugin:register_residual_qwen_model"
 VLLM_INSECURE_SERIALIZATION_ENV = "VLLM_ALLOW_INSECURE_SERIALIZATION"
+VLLM_BATCH_INVARIANT_ENV = "VLLM_BATCH_INVARIANT"
+VLLM_V1_MULTIPROCESSING_ENV = "VLLM_ENABLE_V1_MULTIPROCESSING"
 
 
 def _validated_vllm_registry() -> Any:
@@ -114,13 +116,79 @@ def configure_trusted_vllm_callable_serialization(*, enabled: bool) -> None:
         )
 
 
+def configure_vllm_batch_invariance(*, enabled: bool) -> None:
+    """Set scheduling-invariant vLLM execution before the first vLLM import.
+
+    vLLM 0.22 does not promise reproducible offline output under its default
+    multiprocessing scheduler.  Its H100 batch-invariance mode makes seeded
+    output insensitive to batch order and scheduling, at a possible throughput
+    cost from deterministic kernels and disabled nondeterministic optimizations.
+    Spawned EngineCore and worker processes inherit this explicit environment.
+    """
+
+    if not isinstance(enabled, bool):
+        raise TypeError("enabled must be boolean")
+    configured = os.environ.get(VLLM_BATCH_INVARIANT_ENV)
+    if configured is not None and configured not in {"0", "1"}:
+        raise RuntimeError(
+            f"{VLLM_BATCH_INVARIANT_ENV} must be exactly '0' or '1', not {configured!r}"
+        )
+    if enabled:
+        if configured == "0":
+            raise RuntimeError(
+                f"config enables vLLM batch invariance but "
+                f"{VLLM_BATCH_INVARIANT_ENV}=0 explicitly disables it"
+            )
+        if configured is None:
+            os.environ[VLLM_BATCH_INVARIANT_ENV] = "1"
+        return
+    if configured == "1":
+        raise RuntimeError(
+            f"{VLLM_BATCH_INVARIANT_ENV}=1 conflicts with the default-off "
+            "vllm_batch_invariant config"
+        )
+
+
+def configure_vllm_v1_multiprocessing(*, enabled: bool) -> None:
+    """Select vLLM's EngineCore process mode before importing vLLM.
+
+    vLLM 0.22 reads this environment control while constructing its V1
+    ``EngineCoreClient``.  Disabling it selects the in-process client, so
+    ``LLM.apply_model`` invokes the mutable adapter update directly and does
+    not require insecure callable serialization.  An explicit value is used
+    for both modes so a contradictory shell environment cannot silently win.
+    """
+
+    if not isinstance(enabled, bool):
+        raise TypeError("enabled must be boolean")
+    configured = os.environ.get(VLLM_V1_MULTIPROCESSING_ENV)
+    if configured is not None and configured not in {"0", "1"}:
+        raise RuntimeError(
+            f"{VLLM_V1_MULTIPROCESSING_ENV} must be exactly '0' or '1', "
+            f"not {configured!r}"
+        )
+    requested = "1" if enabled else "0"
+    if configured is not None and configured != requested:
+        raise RuntimeError(
+            f"{VLLM_V1_MULTIPROCESSING_ENV}={configured} conflicts with "
+            f"vllm_enable_v1_multiprocessing={str(enabled).lower()}"
+        )
+    if configured is None:
+        # This must happen before plugin discovery or any other vLLM import.
+        os.environ[VLLM_V1_MULTIPROCESSING_ENV] = requested
+
+
 __all__ = [
+    "VLLM_BATCH_INVARIANT_ENV",
     "VLLM_INSECURE_SERIALIZATION_ENV",
     "VLLM_MODEL_QUALNAME",
     "VLLM_PLUGIN_ENTRY_POINT",
     "VLLM_PLUGIN_NAME",
     "VLLM_RESIDUAL_ARCHITECTURE",
+    "VLLM_V1_MULTIPROCESSING_ENV",
     "configure_trusted_vllm_callable_serialization",
+    "configure_vllm_batch_invariance",
+    "configure_vllm_v1_multiprocessing",
     "ensure_vllm_plugin_discoverable",
     "register_residual_qwen_model",
 ]

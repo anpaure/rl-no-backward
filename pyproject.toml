@@ -12,6 +12,7 @@ license = {text = "MIT"}
 authors = [{name = "anpaure"}]
 dependencies = [
   "datasets>=3,<5",
+  "einops==0.8.1",
   "matplotlib>=3.9",
   "numpy>=2.0",
   "pandas>=2.2",

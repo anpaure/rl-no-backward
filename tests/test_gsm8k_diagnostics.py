@@ -3,12 +3,25 @@ from __future__ import annotations
 import json
 import math
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import torch
 
 from rl_no_backward.gsm8k_diagnostics import (
+    DEFAULT_ADAPTER_LAYERS,
+    DEFAULT_ADAPTER_RANK,
+    DEFAULT_ATTENTION_IMPLEMENTATION,
+    DEFAULT_DATASET_REVISION,
+    DEFAULT_MAX_TOKENS,
+    DEFAULT_MODEL_NAME,
+    DEFAULT_MODEL_REVISION,
+    DEFAULT_USE_FROZEN_PREFIX_SCORING,
     FINITE_DIFFERENCE_MUS,
+    SEARCH_DIRECTIONS,
+    _model_runtime_metadata,
+    _prefix_cache_metadata,
+    _teacher_forced_call_counters,
     audit_sequence_forward_only_source,
     build_parser,
     fisher_trace_comparison,
@@ -129,6 +142,20 @@ def test_diagnostic_writer_emits_standard_json(tmp_path: Path) -> None:
     }
 
 
+def test_cli_defaults_match_pinned_optimized_hf_diagnostic() -> None:
+    arguments = build_parser().parse_args(["--output", "result.json"])
+
+    assert arguments.model == DEFAULT_MODEL_NAME
+    assert arguments.model_revision == DEFAULT_MODEL_REVISION
+    assert arguments.dataset_revision == DEFAULT_DATASET_REVISION
+    assert arguments.attention_implementation == DEFAULT_ATTENTION_IMPLEMENTATION
+    assert arguments.adapter_rank == DEFAULT_ADAPTER_RANK
+    assert arguments.adapter_layers == DEFAULT_ADAPTER_LAYERS
+    assert arguments.max_tokens == DEFAULT_MAX_TOKENS == 512
+    assert arguments.directions == SEARCH_DIRECTIONS == 8
+    assert arguments.use_frozen_prefix_scoring is DEFAULT_USE_FROZEN_PREFIX_SCORING is True
+
+
 def test_cli_exposes_output_model_max_tokens_and_directions() -> None:
     arguments = build_parser().parse_args(
         [
@@ -140,6 +167,17 @@ def test_cli_exposes_output_model_max_tokens_and_directions() -> None:
             "17",
             "--directions",
             "8",
+            "--model-revision",
+            "model-commit",
+            "--dataset-revision",
+            "dataset-commit",
+            "--attention-implementation",
+            "eager",
+            "--adapter-rank",
+            "4",
+            "--adapter-layers",
+            "2",
+            "--no-frozen-prefix-scoring",
         ]
     )
 
@@ -147,3 +185,83 @@ def test_cli_exposes_output_model_max_tokens_and_directions() -> None:
     assert arguments.model == "Qwen/Qwen2.5-0.5B-Instruct"
     assert arguments.max_tokens == 17
     assert arguments.directions == 8
+    assert arguments.model_revision == "model-commit"
+    assert arguments.dataset_revision == "dataset-commit"
+    assert arguments.attention_implementation == "eager"
+    assert arguments.adapter_rank == 4
+    assert arguments.adapter_layers == 2
+    assert arguments.use_frozen_prefix_scoring is False
+
+
+def test_teacher_forced_call_counters_distinguish_cached_prefix_build() -> None:
+    uncached = SimpleNamespace(environment_samples=16, frozen_prefix_cache=None)
+    cached = SimpleNamespace(
+        environment_samples=16,
+        frozen_prefix_cache=SimpleNamespace(full_prefix_calls=1),
+    )
+
+    assert _teacher_forced_call_counters(
+        uncached,  # type: ignore[arg-type]
+        policy_evaluations=8,
+        scoring_micro_batch_size=4,
+        include_prefix_build=True,
+    ) == {"forward_calls": 32, "full_prefix_calls": 32, "suffix_calls": 32}
+    assert _teacher_forced_call_counters(
+        cached,  # type: ignore[arg-type]
+        policy_evaluations=8,
+        scoring_micro_batch_size=4,
+        include_prefix_build=True,
+    ) == {"forward_calls": 33, "full_prefix_calls": 1, "suffix_calls": 32}
+
+
+def test_runtime_and_prefix_metadata_record_resolved_configuration() -> None:
+    model = SimpleNamespace(
+        config=SimpleNamespace(
+            _commit_hash="model-commit",
+            _attn_implementation="flash_attention_2",
+        )
+    )
+    bundle = SimpleNamespace(model=model)
+    runtime = _model_runtime_metadata(
+        bundle,  # type: ignore[arg-type]
+        requested_revision="model-commit",
+        requested_attention_implementation="flash_attention_2",
+    )
+    assert runtime["revision_matches_requested"] is True
+    assert runtime["attention_matches_requested"] is True
+    assert "installed_flash_attn_version" in runtime
+
+    structure = SimpleNamespace(
+        total_layers=28,
+        first_adapted_layer=24,
+        suffix_layers=(object(), object(), object(), object()),
+    )
+    rollout = SimpleNamespace(
+        frozen_prefix_cache=SimpleNamespace(
+            structure=structure,
+            batch_size=16,
+            sequence_length=700,
+            full_prefix_calls=1,
+        ),
+        frozen_prefix_fallback_reason=None,
+    )
+    behavior = {"forward_calls": 2, "full_prefix_calls": 1, "suffix_calls": 1}
+    oracle = {"forward_calls": 1, "full_prefix_calls": 0, "suffix_calls": 1}
+    probes = {"forward_calls": 64, "full_prefix_calls": 0, "suffix_calls": 64}
+    prefix = _prefix_cache_metadata(
+        rollout,  # type: ignore[arg-type]
+        requested=True,
+        behavior_counters=behavior,
+        oracle_counters=oracle,
+        finite_difference_counters=probes,
+    )
+
+    assert prefix["active"] is True
+    assert prefix["frozen_decoder_layers"] == 24
+    assert prefix["replayed_suffix_layers"] == 4
+    assert prefix["cached_examples"] == 16
+    assert prefix["total_teacher_forced_scoring"] == {
+        "forward_calls": 67,
+        "full_prefix_calls": 1,
+        "suffix_calls": 66,
+    }

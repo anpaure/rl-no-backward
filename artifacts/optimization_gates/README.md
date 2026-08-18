@@ -22,6 +22,22 @@ gates; append-only JSONL is retained.
   log-probability gate from those nonzero policy digests. This proves the
   captured graph observes synchronized adapter-core updates rather than stale
   constants.
+- `vllm_fa2_graph_inproc_final_gate`: the selected production shape: fast FA2
+  and CUDA graphs, deterministic in-process scheduling, BP microbatch 4, and
+  fused FO probes at two directions by four examples. BP rollout+optimizer
+  phases were 1.61--2.05 seconds; FO-NPG phases were 1.75--2.23 seconds. The
+  two methods' first-rollout token, mask, behavior-log-probability, and combined
+  SHA-256 identities matched exactly. The production metadata correctly records
+  that memory is the combined HF+vLLM single-process allocator and that no
+  insecure callable serialization is enabled.
+- `vllm_fa2_graph_batch_invariant_gate`: vLLM's deterministic-kernel mode also
+  produced exact matched first rollouts, but rollout phases rose to 2.36--4.03
+  seconds. It is retained as negative performance evidence and is not enabled
+  in the long run.
+- `vllm_fa2_graph_inproc_bp16_gate`: increasing the BP scoring microbatch from
+  4 to 16 reduced the optimizer by only about 0.02--0.04 seconds while raising
+  the combined allocator peak from roughly 32 GiB reserved to 54 GiB. The
+  final config therefore keeps microbatch 4.
 
 Across the graph-mode training records, HF/vLLM absolute token-log-probability
 differences had means `0.0064`--`0.0120`, p99 values `0.127`--`0.144`, and
@@ -40,5 +56,5 @@ oracle or quote those sampled timings as a speedup.
 
 The gate metadata records a dirty source tree based on commit `fb3473d` because
 these runs were executed while the acceleration patch was being developed.
-The locked long sweep must run from a clean published commit in a separate
-artifact directory.
+The locked long sweep runs from a clean published commit in a separate artifact
+directory; none of these short gates enter its accuracy aggregation.

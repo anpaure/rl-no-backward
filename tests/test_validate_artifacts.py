@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 import json
+import struct
 from pathlib import Path
 from typing import Any
 
@@ -280,6 +282,58 @@ def test_selection_counter_and_backward_invariants_fail(tmp_path: Path) -> None:
     assert "forward-only" in joined and "backward_calls=1" in joined
 
 
+def test_opt_in_rollout_provenance_is_required_on_every_train_record(tmp_path: Path) -> None:
+    output, metadata = _build_complete_artifacts(tmp_path)
+    metadata["config"]["record_rollout_provenance"] = True
+    (output / "metadata.json").write_text(
+        json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    for method_index, (method, seed) in enumerate(_expected_trials(metadata["config"])):
+        raw = output / "raw" / f"math_{method}_seed{seed}.jsonl"
+        records = _load_records(raw)
+        for record in records:
+            if record["kind"] != "train_step":
+                continue
+            step = record["step"]
+            identity = 1_000_000 * method_index + 1_000 * seed + step
+            rollout_seed = 20_000 + seed * 1_000 + step
+            token_digest = f"{identity + 10:064x}"
+            logprob_digest = f"{identity + 20:064x}"
+            combined = hashlib.sha256()
+            combined.update(b"rl-no-backward-rollout-v1/combined\0")
+            combined.update(struct.pack("<Q", rollout_seed))
+            combined.update(bytes.fromhex(token_digest))
+            combined.update(bytes.fromhex(logprob_digest))
+            record.update(
+                {
+                    "rollout_provenance_version": "rl-no-backward-rollout-v1",
+                    "rollout_digest_algorithm": "sha256",
+                    "rollout_seed": rollout_seed,
+                    "rollout_token_digest": token_digest,
+                    "behavior_logprob_digest": logprob_digest,
+                    "rollout_digest": combined.hexdigest(),
+                }
+            )
+        _write_jsonl(raw, records)
+
+    assert validate_benchmark_artifacts(output).status == "complete"
+
+    damaged = output / "raw" / "math_fo_npg_seed1.jsonl"
+    damaged_records = _load_records(damaged)
+    target = next(record for record in damaged_records if record["kind"] == "train_step")
+    target.pop("behavior_logprob_digest")
+    target["rollout_seed"] += 1
+    _write_jsonl(damaged, damaged_records)
+
+    result = validate_benchmark_artifacts(output)
+
+    assert result.status == "invalid"
+    joined = "\n".join(result.errors)
+    assert "behavior_logprob_digest is not a lowercase SHA-256 digest" in joined
+    assert "does not match the deterministic scheduled seed" in joined
+
+
 def test_evaluation_counts_environment_budget_and_explicit_test_are_enforced(
     tmp_path: Path,
 ) -> None:
@@ -334,6 +388,33 @@ def test_external_config_is_checked_against_embedded_lock(tmp_path: Path) -> Non
     assert result.status == "incomplete"
     assert any("disagrees with metadata.config" in message for message in result.errors)
     assert any("expected train-step records" in message for message in result.incomplete)
+
+
+def test_external_config_locks_vllm_process_and_serialization_mode(tmp_path: Path) -> None:
+    output, metadata = _build_complete_artifacts(tmp_path)
+    metadata["config"].update(
+        {
+            "rollout_backend": "vllm",
+            "vllm_enable_v1_multiprocessing": False,
+            "vllm_allow_insecure_serialization": False,
+        }
+    )
+    (output / "metadata.json").write_text(
+        json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    external = dict(metadata["config"])
+    external["vllm_enable_v1_multiprocessing"] = True
+    external["vllm_allow_insecure_serialization"] = True
+    config_path = tmp_path / "wrong-vllm-process.yaml"
+    config_path.write_text(yaml.safe_dump(external, sort_keys=True), encoding="utf-8")
+
+    result = validate_benchmark_artifacts(output, config_path=config_path)
+
+    assert result.status == "invalid"
+    joined = "\n".join(result.errors)
+    assert "vllm_enable_v1_multiprocessing" in joined
+    assert "vllm_allow_insecure_serialization" in joined
 
 
 def test_machine_readable_cli_failure_is_nonzero(
