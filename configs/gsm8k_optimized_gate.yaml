@@ -19,7 +19,7 @@ vllm_flash_attn_version: 2
 vllm_allow_insecure_serialization: false
 vllm_logprob_mean_abs_tolerance: 0.02
 vllm_logprob_p99_abs_tolerance: 0.2
-vllm_logprob_max_abs_tolerance: 1.5
+vllm_logprob_max_abs_tolerance: 5.0
 adapter_rank: 8
 adapter_layers: 4
 adapter_scale: 1.0

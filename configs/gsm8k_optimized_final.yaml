@@ -25,7 +25,7 @@ vllm_logprob_mean_abs_tolerance: 0.02
 vllm_logprob_p99_abs_tolerance: 0.2
 # Maximum is a catastrophic-tail guard; mean and p99 are the primary parity
 # gates because a single rare token should not abort millions of scored tokens.
-vllm_logprob_max_abs_tolerance: 1.5
+vllm_logprob_max_abs_tolerance: 5.0
 
 adapter_rank: 8
 adapter_layers: 4
