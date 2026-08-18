@@ -1,0 +1,23 @@
+{
+  "absolute_tolerance": 1e-12,
+  "gradient_abs_difference": 0.0,
+  "loss_abs_difference": 0.0,
+  "native_gradient": -0.00820812131275538,
+  "native_loss": -0.007241001534695794,
+  "objective_settings": {
+    "clip_epsilon": 0.2,
+    "completion_aggregation": "equal completion-length-normalized mean",
+    "gradient_accumulation_normalizer": 1,
+    "importance_sampling_level": "token",
+    "inference_ratio_max": 3.0,
+    "loss_type": "grpo",
+    "vllm_importance_sampling_mode": "sequence_mask"
+  },
+  "passed": true,
+  "schema": "rl-no-backward-trl-1.10-differential-v1",
+  "source_commit": "69f1fcd21e8d94427dd769c7c03791021602627a",
+  "trl_gradient": -0.00820812131275538,
+  "trl_loss": -0.007241001534695794,
+  "trl_version": "1.10.0",
+  "update_abs_difference": 0.0
+}

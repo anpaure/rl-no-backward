@@ -1,0 +1,53 @@
+{
+  "capture_order": [
+    "bp_grpo",
+    "fo_npg"
+  ],
+  "child_process_count": 2,
+  "comparison_valid": true,
+  "matched_digests": {
+    "behavior_logprob_digest": "eb47ed5a33e7f90588fcabe616cffb527cc3c91b73fe36521b36227b017ee4fa",
+    "behavior_policy_digest": "fc61cc8ca79ddb4d1964b2fa12710e983fb76ced22cf848b4ba57f6a1d011089",
+    "candidate_digest": "3ceb2d69a7381e36469bf5b3ed864e6bb8ccc305773c8ae912d8bbdfc36314ab",
+    "hf_old_logprob_digest": "3c703f68aaa97485d34a4dee0f2fe24d41fdf34fe42b4c4ab9cabddc8a0df9cf",
+    "initial_lora_digest": "fc61cc8ca79ddb4d1964b2fa12710e983fb76ced22cf848b4ba57f6a1d011089",
+    "initialization_digest": "fc61cc8ca79ddb4d1964b2fa12710e983fb76ced22cf848b4ba57f6a1d011089",
+    "initialization_file_sha256": "dc30c2662da84317193ac8ac86dc16405bf8a08c2041063aab99ebb90fbce39d",
+    "prompt_example_ids_digest": "4e20163b67f979a1dafa2db6d4b29f141a043756f37e05a4aa99541916bfe7d1",
+    "reward_digest": "fe6fea45dc3a45e1b2682141d3325df357a6d1adaec70191c46ec98e215afacc",
+    "rollout_token_digest": "7c8ce728abc7c4aa5e36d99d1c986d57c99232e2fea3b17ccf0a86d8e3a85c5f"
+  },
+  "max_attempts_per_capture": 1,
+  "measurement_claims": {
+    "chipwhisperer_calibrated": false,
+    "chipwhisperer_primary": true,
+    "chipwhisperer_total_gpu_watts_claimed": false,
+    "nvml_is_auxiliary": true
+  },
+  "methods": [
+    "bp_grpo",
+    "fo_npg"
+  ],
+  "pair_receipt_sha256": "a77a8ff5d1fbc88ef5f11436fca80e9acff4ec2282b9f0e1706e2146b5c4600d",
+  "results": {
+    "bp_grpo": {
+      "path": "bp_grpo/result.json",
+      "result_receipt_sha256": "38f2b6c87ab1f19e7708f62833bc8faa2e86c7ed544f17ddbd9ab24fad566e93",
+      "sha256": "ef3801f2d69aec0cd4693e558eab49ba891221563f67b4bed93b677fa04ca66c",
+      "sidecapture_store": "bp_grpo/sidecapture"
+    },
+    "fo_npg": {
+      "path": "fo_npg/result.json",
+      "result_receipt_sha256": "03718163729e295e9b3d3e9439d157752d4728f4caed63f9837d8bb0d805f6dc",
+      "sha256": "e47d74d8b37b41ae3e84e1ae3199d8f9c1b3a5e39e87767d85d70f9211b4ab4f",
+      "sidecapture_store": "fo_npg/sidecapture"
+    }
+  },
+  "schema": "rl-no-backward-matched-lora-power-pair-v1",
+  "seed": 0,
+  "sidecapture_experiment_run_calls": 2,
+  "source_commit": "a76a1ee03db10d52a53470b01eb1861ccbfb9ddb",
+  "status": "complete",
+  "step": 1,
+  "total_capture_count": 2
+}

@@ -1,0 +1,571 @@
+{
+  "backward_calls": 4,
+  "behavior_logprob_digest": "eb47ed5a33e7f90588fcabe616cffb527cc3c91b73fe36521b36227b017ee4fa",
+  "behavior_policy_digest": "fc61cc8ca79ddb4d1964b2fa12710e983fb76ced22cf848b4ba57f6a1d011089",
+  "behavior_policy_version": "power-capture/bp_grpo/seed=0/step=1/frozen-rollout",
+  "candidate": {
+    "example_ids": [
+      "0480b5f573c5c011c116",
+      "69ee1cea082d35141890",
+      "dc5d57e2bb4b8ea34d69",
+      "069a7b83258fba8c112d"
+    ],
+    "rollout_seed": 20001,
+    "step": 1
+  },
+  "candidate_digest": "3ceb2d69a7381e36469bf5b3ed864e6bb8ccc305773c8ae912d8bbdfc36314ab",
+  "config_path": "/home/amodo/rl-no-backward-matched/configs/gsm8k_matched_lora_power_trace.yaml",
+  "config_sha256": "f1be5d3f63c8d6b693d2f43ffc746d72278b47000c7bac8486797a4ffae30501",
+  "fo_backprop_module_imported": null,
+  "forward_calls": 8,
+  "frozen_base_parameter_digest_after": "6ce080d42e572f097f6d52e7b802e3e5a124d4ddd9a8262e120a21ed915e7012",
+  "frozen_base_parameter_digest_before": "6ce080d42e572f097f6d52e7b802e3e5a124d4ddd9a8262e120a21ed915e7012",
+  "hf_old_logprob_digest": "3c703f68aaa97485d34a4dee0f2fe24d41fdf34fe42b4c4ab9cabddc8a0df9cf",
+  "initial_lora_digest": "fc61cc8ca79ddb4d1964b2fa12710e983fb76ced22cf848b4ba57f6a1d011089",
+  "initialization_digest": "fc61cc8ca79ddb4d1964b2fa12710e983fb76ced22cf848b4ba57f6a1d011089",
+  "initialization_file_sha256": "dc30c2662da84317193ac8ac86dc16405bf8a08c2041063aab99ebb90fbce39d",
+  "initialization_path": "/home/amodo/rl-no-backward-matched/artifacts/shared_initializations/qwen25_1p5b_qv_r8_all28_seed0.pt",
+  "lora_digest_after": "2433c765863724268ae7488909aa757e5808b810e6a5cbf7bb3c26166cf9e2ed",
+  "matched_config": {
+    "attention_implementation": "flash_attention_2",
+    "backprop": {
+      "fused_adamw": true,
+      "learning_rate": 1e-05,
+      "max_grad_norm": 1.0,
+      "prompt_groups_per_micro_batch": 1,
+      "scheduler_type": "linear",
+      "warmup_ratio": 0.1,
+      "weight_decay": 0.0
+    },
+    "batch_size": 4,
+    "dataset_revision": "740312add88f781978c0658806c59bc2815b9866",
+    "dev_size": 256,
+    "dev_source_index_receipt": "configs/gsm8k_standard_lora_dev_source_indices.json",
+    "device": "cuda",
+    "dtype": "bfloat16",
+    "enforce_stochastic_efficacy_checks": false,
+    "eval_batch_size": 64,
+    "eval_interval": 1,
+    "evaluation_manifest": "configs/gsm8k_standard_lora_eval_manifest.json",
+    "expected_lora_parameter_count": 1089536,
+    "focus": {
+      "ema_decay": 0.95,
+      "family_rank": 2,
+      "relative_eigenvalue_floor": 1e-07
+    },
+    "forward": {
+      "directions": 8,
+      "finite_difference_mu": 10.0,
+      "fisher_damping": 0.2,
+      "kl_budget": 0.001,
+      "line_search_decay": 0.5,
+      "line_search_steps": 6,
+      "max_step_norm": 0.1,
+      "minimum_surrogate_improvement": -1e-08,
+      "scoring_micro_batch_size": 16
+    },
+    "group_size": 8,
+    "lora": {
+      "alpha": 16,
+      "bias": "none",
+      "dropout": 0.0,
+      "layer_indices": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27
+      ],
+      "rank": 8,
+      "target_modules": [
+        "q_proj",
+        "v_proj"
+      ]
+    },
+    "max_new_tokens": 512,
+    "max_prompt_tokens": 256,
+    "methods": [
+      "base",
+      "bp_grpo",
+      "fo_npg"
+    ],
+    "minimum_bp_dev_accuracy_gain": 0.0,
+    "minimum_bp_train_accuracy_gain": 0.0,
+    "minimum_effective_completion_fraction": 0.5,
+    "model_name": "Qwen/Qwen2.5-1.5B-Instruct",
+    "model_revision": "989aa7980e4cf806f80c7fef2b1adb7bc71aa306",
+    "objective": {
+      "advantage_epsilon": 0.0001,
+      "clip_epsilon": 0.2,
+      "inference_correction_mode": "sequence_mask",
+      "inference_ratio_max": 3.0,
+      "inference_ratio_min": null
+    },
+    "projected_gradient_max_relative_l2": 0.45,
+    "projected_gradient_min_cosine": 0.9,
+    "record_rollout_provenance": true,
+    "rollout_backend": "vllm_lora",
+    "run_projected_gradient_gate": true,
+    "run_test_evaluation": false,
+    "sampling_temperature": 1.0,
+    "schedule_mode": "fixed_overfit",
+    "scoring_micro_batch_size": 16,
+    "seeds": [
+      0
+    ],
+    "shared_initialization_path_template": "artifacts/shared_initializations/qwen25_1p5b_qv_r8_all28_seed{seed}.pt",
+    "steps": 1,
+    "subset_seed": 314159,
+    "test_size": 0,
+    "touched_test_exclusions": "configs/gsm8k_touched_test_exclusions.json",
+    "train_size": 4,
+    "vllm_allow_insecure_serialization": false,
+    "vllm_batch_invariant": false,
+    "vllm_enable_v1_multiprocessing": false,
+    "vllm_enforce_eager": false,
+    "vllm_flash_attn_version": 2,
+    "vllm_kv_cache_memory_bytes": 2147483648,
+    "vllm_logprob_max_abs_tolerance": 5.0,
+    "vllm_logprob_mean_abs_tolerance": 0.02,
+    "vllm_logprob_p99_abs_tolerance": 0.2,
+    "wandb_mode": "disabled",
+    "wandb_project": "rl-no-backward"
+  },
+  "measurement_scope": {
+    "captured_phase": "optimizer_update_only",
+    "chipwhisperer_quantity": "uncalibrated normalized ADC proxy",
+    "chipwhisperer_total_gpu_watts_claimed": false,
+    "evaluation_run": false,
+    "nvml_auxiliary": true,
+    "rollout_captured": false,
+    "timing_alignment": "projected host-trigger/CUDA-event annotations; no shared hardware clock",
+    "wandb_initialized": false
+  },
+  "method": "bp_grpo",
+  "old_score_forward_calls": 2,
+  "optimizer_result": {
+    "accepted": true,
+    "backward_calls": 4,
+    "empirical_kl": 0.0004782296600751579,
+    "environment_samples": 32,
+    "forward_calls": 8,
+    "grpo_loss_after": -0.007263455539941788,
+    "grpo_loss_before": -0.0072710029780864716,
+    "grpo_objective_after": 0.007263455539941788,
+    "grpo_objective_before": 0.0072710029780864716,
+    "optimizer_wall_time_seconds": 1.032747538993135,
+    "policy_evaluations": 2,
+    "projected_gradient_norm": 0.02212737500667572,
+    "reward_mean": 0.9375,
+    "scored_tokens": 13482,
+    "step_norm": 0.0062907361425459385,
+    "surrogate_improvement": -7.547438144683838e-06,
+    "teacher_forced_examples": 64,
+    "zero_advantage_fraction": 0.5
+  },
+  "policy_evaluations": 2,
+  "power_capture_config": {
+    "bits_per_sample": 12,
+    "capture_count": 1,
+    "channel": "power",
+    "chipwhisperer_commit": "ed0ed33efbc55421f4e1d995816fd50a5b2e5d01",
+    "chipwhisperer_ref": "v6.0.0-isl.1",
+    "chipwhisperer_version": "6.0.0+isl.1",
+    "clock_hz": 150000000.0,
+    "cuda_annotation_sync": "both",
+    "duration": "20s",
+    "gain_db": 10.0,
+    "max_attempts": 1,
+    "max_stream_rate_hz": 10000000.0,
+    "mode": "stream",
+    "nvml_auxiliary": true,
+    "nvml_gpu_index": 0,
+    "nvml_interval_s": 0.01,
+    "product_id": 44262,
+    "safe_memory_fraction": 0.65,
+    "sample_rate": "100kHz",
+    "serial_number": "50203220325531583230313235303038",
+    "sidecapture_commit": "c1ef46862a72b8557af03d781200d226fcda738e",
+    "sidecapture_version": "0.1.1",
+    "stream_arm_settle_s": 0.001,
+    "stream_fast_fifo": false,
+    "stream_segment_size": 65536,
+    "trace_dtype": "float32",
+    "trigger": "auto",
+    "trigger_delay_s": 1.0,
+    "usb_read_mode": "auto",
+    "warmup": 0,
+    "workload_sync": "none"
+  },
+  "process_isolation": "fresh_python_process_per_method",
+  "prompt_example_ids_digest": "4e20163b67f979a1dafa2db6d4b29f141a043756f37e05a4aa99541916bfe7d1",
+  "resolved_model_snapshot": "/home/amodo/.cache/huggingface/hub/models--Qwen--Qwen2.5-1.5B-Instruct/snapshots/989aa7980e4cf806f80c7fef2b1adb7bc71aa306",
+  "responses": 32,
+  "result_receipt_sha256": "38f2b6c87ab1f19e7708f62833bc8faa2e86c7ed544f17ddbd9ab24fad566e93",
+  "reward_digest": "fe6fea45dc3a45e1b2682141d3325df357a6d1adaec70191c46ec98e215afacc",
+  "rollout_token_digest": "7c8ce728abc7c4aa5e36d99d1c986d57c99232e2fea3b17ccf0a86d8e3a85c5f",
+  "runtime": {
+    "cuda_device_index": 0,
+    "cuda_device_name": "NVIDIA H100 PCIe",
+    "cuda_device_total_memory_bytes": 85019328512,
+    "cuda_visible_devices": null,
+    "hostname": "arboghast",
+    "nvidia_smi": {
+      "query": "index,uuid,pci.bus_id,name,driver_version",
+      "rows": [
+        "0, GPU-fdd47323-bd9b-906a-1ccf-cb58ff4b3a69, 00000000:41:00.0, NVIDIA H100 PCIe, 590.48.01"
+      ]
+    },
+    "packages": {
+      "chipwhisperer": {
+        "direct_url": {
+          "url": "https://github.com/anpaure/chipwhisperer.git",
+          "vcs_info": {
+            "commit_id": "ed0ed33efbc55421f4e1d995816fd50a5b2e5d01",
+            "requested_revision": "v6.0.0-isl.1",
+            "vcs": "git"
+          }
+        },
+        "name": "chipwhisperer",
+        "version": "6.0.0+isl.1"
+      },
+      "flash-attn": {
+        "direct_url": {
+          "archive_info": {},
+          "url": "file:///tmp/tmp.ICIjjmV5uu/flash_attn-2.8.3+cu130torch2.11-cp312-cp312-linux_x86_64.whl"
+        },
+        "name": "flash-attn",
+        "version": "2.8.3+cu130torch2.11"
+      },
+      "sidecapture": {
+        "direct_url": {
+          "url": "https://github.com/anpaure/sidecapture.git",
+          "vcs_info": {
+            "commit_id": "c1ef46862a72b8557af03d781200d226fcda738e",
+            "requested_revision": "c1ef46862a72b8557af03d781200d226fcda738e",
+            "vcs": "git"
+          }
+        },
+        "name": "sidecapture",
+        "version": "0.1.1"
+      },
+      "torch": {
+        "direct_url": null,
+        "name": "torch",
+        "version": "2.11.0+cu130"
+      },
+      "vllm": {
+        "direct_url": null,
+        "name": "vllm",
+        "version": "0.22.0"
+      }
+    },
+    "pid": 3110632,
+    "platform": "Linux-6.8.0-136-generic-x86_64-with-glibc2.39",
+    "python": "3.12.13",
+    "python_executable": "/home/amodo/rl-no-backward-opt/.venv-vllm-managed/bin/python",
+    "resolved_model_snapshot": "/home/amodo/.cache/huggingface/hub/models--Qwen--Qwen2.5-1.5B-Instruct/snapshots/989aa7980e4cf806f80c7fef2b1adb7bc71aa306",
+    "torch_cuda_version": "13.0",
+    "torch_version": "2.11.0+cu130"
+  },
+  "schema": "rl-no-backward-matched-lora-power-capture-v1",
+  "seed": 0,
+  "sidecapture": {
+    "accepted_count": 1,
+    "annotation_count": 4,
+    "annotations_path": "annotations/shard_000000/capture_000000000.json",
+    "annotations_sha256": "848c66e7b1244432654db42c2be2bfc325b3b2d6a56d938daff561cb95f5b2c7",
+    "attempt": 1,
+    "capture_count": 1,
+    "files": [
+      {
+        "path": ".run.lock",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "size_bytes": 0
+      },
+      {
+        "path": "annotations/shard_000000/capture_000000000.json",
+        "sha256": "848c66e7b1244432654db42c2be2bfc325b3b2d6a56d938daff561cb95f5b2c7",
+        "size_bytes": 2275
+      },
+      {
+        "path": "artifacts/shard_000000/capture_000000000.matched_candidate.json",
+        "sha256": "1631f558e198b372fe041d2087887c10cfad6ee533a5ec52bf18ba916a1ffb24",
+        "size_bytes": 2643
+      },
+      {
+        "path": "artifacts/shard_000000/capture_000000000.optimizer_result.json",
+        "sha256": "9453d022d254ccb2e5a573f014bcf0a70c8775d663afacb0926068e21888ebbb",
+        "size_bytes": 662
+      },
+      {
+        "path": "channels/nvml.gpu_utilization_pct/shard_000000/capture_000000000.npy",
+        "sha256": "9b80355a5a2cb98187649fddb21ca940c2acc97e910e3f8395fbda48451eada9",
+        "size_bytes": 8172
+      },
+      {
+        "path": "channels/nvml.memory_clock_mhz/shard_000000/capture_000000000.npy",
+        "sha256": "a4c57aa34c8f7c225e703c8a464c7e458a199ef73fd67ff31cf1e86aaf5fa344",
+        "size_bytes": 8172
+      },
+      {
+        "path": "channels/nvml.memory_utilization_pct/shard_000000/capture_000000000.npy",
+        "sha256": "9e2482ba341f5f9e8dd5d5b4e0ee1e79e2734ce860ec31bae29fb5d87762e482",
+        "size_bytes": 8172
+      },
+      {
+        "path": "channels/nvml.power_w/shard_000000/capture_000000000.npy",
+        "sha256": "af50639fa2ee5d6ce409a5fda84f3d1893fd6a01e0a9880f2100af61b3180e6b",
+        "size_bytes": 8172
+      },
+      {
+        "path": "channels/nvml.sm_clock_mhz/shard_000000/capture_000000000.npy",
+        "sha256": "d2f5c22db399da9c7494840e1dc2b3a450fe1c50d3e13127033916678878ff59",
+        "size_bytes": 8172
+      },
+      {
+        "path": "channels/nvml.temperature_c/shard_000000/capture_000000000.npy",
+        "sha256": "ac85470e3d6a64ad6d4c925e6f84630071a1de1781f413a07ebd2ef95e7bc197",
+        "size_bytes": 8172
+      },
+      {
+        "path": "channels/power/shard_000000/capture_000000000.npy",
+        "sha256": "e6dded802721bd9656decb8518cfc2cf84cc2ad5e7c7708f9072cc43dd5e2e52",
+        "size_bytes": 8000128
+      },
+      {
+        "path": "manifest.json",
+        "sha256": "374a2f3e5a243d06e1c7c008df4a82a7c5da8e79ea07cdcfdddf47ca1ab1a25b",
+        "size_bytes": 4770
+      },
+      {
+        "path": "records/shard_000000/capture_000000000.json",
+        "sha256": "a0f120ce7b63d1f4dbae5d9e8522a7b8e333617160ab53855cecdf16a58803a9",
+        "size_bytes": 8704
+      },
+      {
+        "path": "run_state.json",
+        "sha256": "42a2bbb0aaad36750a07a9e3324a288cf047c6fca7414e0e84b7f5b7eb87101e",
+        "size_bytes": 97
+      },
+      {
+        "path": "timestamps/nvml.gpu_utilization_pct/shard_000000/capture_000000000.npy",
+        "sha256": "8b102378395c490ffef747e349369f67ca8ffb23e7a254b2c8ddb2d5a1aadc7c",
+        "size_bytes": 16216
+      },
+      {
+        "path": "timestamps/nvml.memory_clock_mhz/shard_000000/capture_000000000.npy",
+        "sha256": "8b102378395c490ffef747e349369f67ca8ffb23e7a254b2c8ddb2d5a1aadc7c",
+        "size_bytes": 16216
+      },
+      {
+        "path": "timestamps/nvml.memory_utilization_pct/shard_000000/capture_000000000.npy",
+        "sha256": "8b102378395c490ffef747e349369f67ca8ffb23e7a254b2c8ddb2d5a1aadc7c",
+        "size_bytes": 16216
+      },
+      {
+        "path": "timestamps/nvml.power_w/shard_000000/capture_000000000.npy",
+        "sha256": "8b102378395c490ffef747e349369f67ca8ffb23e7a254b2c8ddb2d5a1aadc7c",
+        "size_bytes": 16216
+      },
+      {
+        "path": "timestamps/nvml.sm_clock_mhz/shard_000000/capture_000000000.npy",
+        "sha256": "8b102378395c490ffef747e349369f67ca8ffb23e7a254b2c8ddb2d5a1aadc7c",
+        "size_bytes": 16216
+      },
+      {
+        "path": "timestamps/nvml.temperature_c/shard_000000/capture_000000000.npy",
+        "sha256": "8b102378395c490ffef747e349369f67ca8ffb23e7a254b2c8ddb2d5a1aadc7c",
+        "size_bytes": 16216
+      }
+    ],
+    "health": {
+      "issues": [],
+      "metrics": {
+        "annotations.out_of_bounds": 0,
+        "nvml.gpu_utilization_pct.finite_fraction": 1.0,
+        "nvml.memory_clock_mhz.finite_fraction": 1.0,
+        "nvml.memory_utilization_pct.finite_fraction": 1.0,
+        "nvml.power_w.finite_fraction": 1.0,
+        "nvml.sm_clock_mhz.finite_fraction": 1.0,
+        "nvml.temperature_c.finite_fraction": 1.0,
+        "power.finite_fraction": 1.0,
+        "primary.adc_rail_fraction": 0.0,
+        "primary.adc_robust_high": 0.053955078125,
+        "primary.adc_robust_low": -0.047119140625,
+        "primary.adc_robust_span": 0.10107421875,
+        "primary.expected_samples": 2000000,
+        "primary.max_equal_run_fraction": 2e-06,
+        "primary.samples": 2000000,
+        "primary.std": 0.028414233771715064
+      },
+      "ok": true
+    },
+    "manifest_path": "manifest.json",
+    "manifest_sha256": "374a2f3e5a243d06e1c7c008df4a82a7c5da8e79ea07cdcfdddf47ca1ab1a25b",
+    "nvml_capture_host_span_seconds": 20.10012992,
+    "primary_channel": {
+      "dtype": "float32",
+      "metadata": {
+        "bits_per_sample": 12,
+        "calibrated": false,
+        "gain_db": 10.0
+      },
+      "path": "channels/power/shard_000000/capture_000000000.npy",
+      "sample_rate_hz": 100000.0,
+      "shape": [
+        2000000
+      ],
+      "unit": "normalized_adc"
+    },
+    "primary_channel_path": "channels/power/shard_000000/capture_000000000.npy",
+    "primary_channel_sha256": "e6dded802721bd9656decb8518cfc2cf84cc2ad5e7c7708f9072cc43dd5e2e52",
+    "record_path": "records/shard_000000/capture_000000000.json",
+    "record_sha256": "a0f120ce7b63d1f4dbae5d9e8522a7b8e333617160ab53855cecdf16a58803a9",
+    "requested_capture": {
+      "bits_per_sample": 12,
+      "channel": "power",
+      "duration_s": 20.0,
+      "gain_db": 10.0,
+      "mode": "stream",
+      "pretrigger_s": 0.0,
+      "sample_rate_hz": 100000.0
+    },
+    "resolved_capture": {
+      "bits_per_sample": 12,
+      "decimation": 1500,
+      "details": {
+        "gain_db": 10.0,
+        "max_samples_hw": 327828,
+        "max_samples_safe": 213088,
+        "max_stream_rate_hz": 10000000.0,
+        "stream_arm_settle_s": 0.001,
+        "stream_fast_fifo": false,
+        "stream_segment_size": 65536,
+        "trigger": "force",
+        "usb_read_mode": "auto"
+      },
+      "duration_s": 20.0,
+      "mode": "stream",
+      "pretrigger_samples": 0,
+      "raw_sample_rate_hz": 150000000.0,
+      "sample_rate_hz": 100000.0,
+      "samples": 2000000,
+      "warnings": []
+    },
+    "sampler_metadata": {
+      "auxiliaries": [
+        {
+          "backend": "nvml",
+          "clock_domain": "host_monotonic",
+          "gpu_index": 0,
+          "interval_s": 0.01
+        }
+      ],
+      "backend": "composite",
+      "primary": {
+        "adc_error_controls": {
+          "clip_errors_disabled_readback": false,
+          "clip_errors_disabled_requested": false,
+          "clip_errors_disabled_supported": true,
+          "lo_gain_errors_disabled_readback": true,
+          "lo_gain_errors_disabled_required": true,
+          "sidecapture_adc_clipping_validator_enabled": true
+        },
+        "backend": "chipwhisperer",
+        "chipwhisperer_version": "6.0.0+isl.1",
+        "clock_hz": 150000000.0,
+        "product_id": "0xace6",
+        "resolved": {
+          "bits_per_sample": 12,
+          "decimation": 1500,
+          "details": {
+            "gain_db": 10.0,
+            "max_samples_hw": 327828,
+            "max_samples_safe": 213088,
+            "max_stream_rate_hz": 10000000.0,
+            "stream_arm_settle_s": 0.001,
+            "stream_fast_fifo": false,
+            "stream_segment_size": 65536,
+            "trigger": "force",
+            "usb_read_mode": "auto"
+          },
+          "duration_s": 20.0,
+          "mode": "stream",
+          "pretrigger_samples": 0,
+          "raw_sample_rate_hz": 150000000.0,
+          "sample_rate_hz": 100000.0,
+          "samples": 2000000,
+          "warnings": []
+        },
+        "safe_memory_fraction": 0.65,
+        "serial_number": "50203220325531583230313235303038",
+        "streaming_controls": {
+          "actual_trigger_mode_readback": "force",
+          "adc_stream_mode_readback": true,
+          "max_stream_rate_hz_configured": 10000000.0,
+          "requested_mode": "stream",
+          "requested_trigger_mode": "auto",
+          "resolved_mode": "stream",
+          "stream_arm_settle_s_requested": 0.001,
+          "stream_fast_fifo_requested": false,
+          "stream_segment_size_configured": 65536,
+          "stream_segment_size_readback": 65536
+        },
+        "trigger": "auto",
+        "usb_read_mode": "auto"
+      }
+    },
+    "trace_root": "sidecapture"
+  },
+  "source_commit": "a76a1ee03db10d52a53470b01eb1861ccbfb9ddb",
+  "status": "complete",
+  "step": 1,
+  "valid_response_tokens": 6741,
+  "vllm_hf_parity": {
+    "vllm_hf_logprob_max_abs_difference": 0.32709574699401855,
+    "vllm_hf_logprob_mean_abs_difference": 0.010242466814815998,
+    "vllm_hf_logprob_p99_abs_difference": 0.11778222769498825
+  },
+  "vllm_reload_receipt": {
+    "active_lora_ids": [
+      1
+    ],
+    "adapter_model_sha256": "fa04840b7589b0e646d420c6591c1e8671a800019ca83e9f0cbc52867356a956",
+    "adapter_path": "/home/amodo/rl-no-backward-results/chipwhisperer-stream-pair-a76a1ee/bp_grpo/vllm_lora_exports/adapter-000001-fc61cc8ca79d",
+    "adapter_path_transient": true,
+    "durable_hash_fields": [
+      "state_digest",
+      "adapter_model_sha256"
+    ],
+    "load_inplace": true,
+    "parameter_count": 1089536,
+    "policy_version": "power-capture/bp_grpo/seed=0/step=1/frozen-rollout",
+    "prefix_cache_reset": true,
+    "state_digest": "fc61cc8ca79ddb4d1964b2fa12710e983fb76ced22cf848b4ba57f6a1d011089",
+    "version": 1
+  }
+}

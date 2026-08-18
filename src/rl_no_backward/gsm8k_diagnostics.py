@@ -7,17 +7,19 @@ difference quantity is obtained through the production inference-only sequence
 path, and :func:`audit_sequence_forward_only_source` statically verifies that
 the path contains no reverse-mode calls.
 
-Run the diagnostic on a CUDA machine with, for example::
+Run the pinned optimized diagnostic on a CUDA machine with, for example::
 
     python -m rl_no_backward.gsm8k_diagnostics \
-        --output artifacts/gsm8k_diagnostics.json \
-        --model Qwen/Qwen2.5-1.5B-Instruct \
-        --max-tokens 64
+        --output artifacts/diagnostics/gsm8k_fd.json
 
 Only the official GSM8K training split is loaded.  The calibration examples,
 two rollout prompts, sampled completions, and random search subspace are all
 selected with fixed seeds so the saved JSON is an auditable experiment
-artifact rather than a synthetic unit check.
+artifact rather than a synthetic unit check.  Defaults deliberately match the
+optimized Hugging Face trainer: the pinned Qwen and GSM8K revisions,
+FlashAttention 2, four rank-eight residual adapters, 512 generated tokens,
+eight rollout samples per prompt, eight probe directions, and exact frozen-
+prefix teacher-forced scoring.
 """
 
 from __future__ import annotations
@@ -52,10 +54,14 @@ from .gsm8k import (
 )
 from .gsm8k_experiment import GSM8KExperimentConfig, shaped_gsm8k_reward
 from .model import (
+    ATTENTION_IMPLEMENTATIONS,
     ModelBundle,
+    installed_flash_attn_version,
     load_model_bundle,
     parameter_vector,
+    resolved_attention_implementation,
     set_adapter_grad_enabled,
+    validate_attention_implementation,
 )
 from .sequence_forward_only import directional_sequence_score_statistics
 from .sequence_policy import (
@@ -69,11 +75,20 @@ from .task import CANDIDATE_ACTIONS
 
 FINITE_DIFFERENCE_MUS: tuple[float, ...] = (0.25, 0.5, 1.0, 2.0)
 DIAGNOSTIC_SEED = 2026
-CALIBRATION_EXAMPLES = 8
+DEFAULT_MODEL_NAME = "Qwen/Qwen2.5-1.5B-Instruct"
+DEFAULT_MODEL_REVISION = "989aa7980e4cf806f80c7fef2b1adb7bc71aa306"
+DEFAULT_DATASET_REVISION = "740312add88f781978c0658806c59bc2815b9866"
+DEFAULT_ATTENTION_IMPLEMENTATION = "flash_attention_2"
+DEFAULT_ADAPTER_RANK = 8
+DEFAULT_ADAPTER_LAYERS = 4
+DEFAULT_USE_FROZEN_PREFIX_SCORING = True
+CALIBRATION_EXAMPLES = 16
 ROLLOUT_BATCH_SIZE = 2
-ROLLOUT_GROUP_SIZE = 4
-SEARCH_DIRECTIONS = 4
-DEFAULT_MAX_TOKENS = 64
+ROLLOUT_GROUP_SIZE = 8
+SEARCH_DIRECTIONS = 8
+DEFAULT_MAX_PROMPT_TOKENS = 256
+DEFAULT_MAX_TOKENS = 512
+DEFAULT_SCORING_MICRO_BATCH_SIZE = 16
 
 
 def _finite_tensor(name: str, value: Tensor) -> Tensor:
@@ -307,6 +322,119 @@ def write_gsm8k_diagnostic_results(
     return path
 
 
+def _teacher_forced_call_counters(
+    rollout: SequenceRolloutBatch,
+    *,
+    policy_evaluations: int,
+    scoring_micro_batch_size: int,
+    include_prefix_build: bool = False,
+) -> dict[str, int]:
+    """Count physical scoring calls and decoder-prefix/suffix traversals.
+
+    A normal model call traverses both the frozen prefix and adapted suffix, so
+    the two traversal counters are intentionally not additive in that case.
+    With an active cache, prefix capture and suffix replay are separate calls.
+    These are the same semantics used by the benchmark telemetry.
+    """
+
+    if (
+        isinstance(policy_evaluations, bool)
+        or not isinstance(policy_evaluations, int)
+        or policy_evaluations < 1
+    ):
+        raise ValueError("policy_evaluations must be a positive integer")
+    if (
+        isinstance(scoring_micro_batch_size, bool)
+        or not isinstance(scoring_micro_batch_size, int)
+        or scoring_micro_batch_size < 1
+    ):
+        raise ValueError("scoring_micro_batch_size must be a positive integer")
+    micro_batches = math.ceil(rollout.environment_samples / scoring_micro_batch_size)
+    score_calls = policy_evaluations * micro_batches
+    cache = rollout.frozen_prefix_cache
+    if cache is None:
+        return {
+            "forward_calls": score_calls,
+            "full_prefix_calls": score_calls,
+            "suffix_calls": score_calls,
+        }
+    prefix_build_calls = cache.full_prefix_calls if include_prefix_build else 0
+    return {
+        "forward_calls": score_calls + prefix_build_calls,
+        "full_prefix_calls": prefix_build_calls,
+        "suffix_calls": score_calls,
+    }
+
+
+def _sum_call_counters(*counters: Mapping[str, int]) -> dict[str, int]:
+    keys = ("forward_calls", "full_prefix_calls", "suffix_calls")
+    return {key: sum(int(counter[key]) for counter in counters) for key in keys}
+
+
+def _model_runtime_metadata(
+    bundle: ModelBundle,
+    *,
+    requested_revision: str,
+    requested_attention_implementation: str,
+) -> dict[str, Any]:
+    resolved_revision = getattr(getattr(bundle.model, "config", None), "_commit_hash", None)
+    resolved_revision = str(resolved_revision) if resolved_revision is not None else None
+    resolved_attention = resolved_attention_implementation(bundle.model)
+    return {
+        "requested_revision": requested_revision,
+        "resolved_revision": resolved_revision,
+        "revision_matches_requested": (
+            None if resolved_revision is None else resolved_revision == requested_revision
+        ),
+        "requested_attention_implementation": requested_attention_implementation,
+        "resolved_attention_implementation": resolved_attention,
+        "attention_matches_requested": resolved_attention == requested_attention_implementation,
+        "installed_flash_attn_version": installed_flash_attn_version(),
+    }
+
+
+def _prefix_cache_metadata(
+    rollout: SequenceRolloutBatch,
+    *,
+    requested: bool,
+    behavior_counters: Mapping[str, int],
+    oracle_counters: Mapping[str, int],
+    finite_difference_counters: Mapping[str, int],
+) -> dict[str, Any]:
+    cache = rollout.frozen_prefix_cache
+    if cache is None:
+        total_layers = frozen_layers = suffix_layers = cached_examples = sequence_length = None
+        build_full_prefix_calls = 0
+    else:
+        structure = cache.structure
+        total_layers = structure.total_layers
+        frozen_layers = structure.first_adapted_layer
+        suffix_layers = len(structure.suffix_layers)
+        cached_examples = cache.batch_size
+        sequence_length = cache.sequence_length
+        build_full_prefix_calls = cache.full_prefix_calls
+    return {
+        "requested": requested,
+        "active": cache is not None,
+        "fallback_reason": rollout.frozen_prefix_fallback_reason,
+        "total_decoder_layers": total_layers,
+        "frozen_decoder_layers": frozen_layers,
+        "replayed_suffix_layers": suffix_layers,
+        "cached_examples": cached_examples,
+        "cached_sequence_length": sequence_length,
+        "build_full_prefix_calls": build_full_prefix_calls,
+        "counter_scope": "teacher_forced_scoring; autoregressive generation excluded",
+        "behavior_old_policy": dict(behavior_counters),
+        "exact_backprop_oracle": dict(oracle_counters),
+        "finite_difference_probes": dict(finite_difference_counters),
+        "total_teacher_forced_scoring": _sum_call_counters(
+            behavior_counters,
+            oracle_counters,
+            finite_difference_counters,
+        ),
+    }
+
+
 def _chat_prompts(tokenizer: object, examples: Sequence[GSM8KExample]) -> list[str]:
     def render(messages: Sequence[Mapping[str, str]]) -> str:
         return tokenizer.apply_chat_template(
@@ -406,13 +534,15 @@ def _rollout_rows(
 
 def _load_fixed_train_examples(
     config: GSM8KExperimentConfig,
+    *,
+    dataset_revision: str | None = None,
 ) -> tuple[tuple[GSM8KExample, ...], tuple[GSM8KExample, ...], int]:
     difficulty = DifficultyFilter(
         min_reasoning_lines=config.min_reasoning_lines,
         max_reasoning_lines=config.max_reasoning_lines,
         max_answer_magnitude=config.max_answer_magnitude,
     )
-    official_train = load_gsm8k_split(GSM8K_TRAIN_SPLIT)
+    official_train = load_gsm8k_split(GSM8K_TRAIN_SPLIT, revision=dataset_revision)
     filtered_train = filter_by_difficulty(official_train, difficulty)
     needed = CALIBRATION_EXAMPLES + ROLLOUT_BATCH_SIZE
     selected = select_seeded_subset(
@@ -431,17 +561,47 @@ def _load_fixed_train_examples(
 def run_gsm8k_diagnostics(
     *,
     model_name: str | None = None,
+    model_revision: str = DEFAULT_MODEL_REVISION,
+    dataset_revision: str = DEFAULT_DATASET_REVISION,
+    attention_implementation: str = DEFAULT_ATTENTION_IMPLEMENTATION,
+    adapter_rank: int = DEFAULT_ADAPTER_RANK,
+    adapter_layers: int = DEFAULT_ADAPTER_LAYERS,
     max_tokens: int = DEFAULT_MAX_TOKENS,
     directions: int = SEARCH_DIRECTIONS,
+    use_frozen_prefix_scoring: bool = DEFAULT_USE_FROZEN_PREFIX_SCORING,
 ) -> dict[str, Any]:
-    """Run the fixed real-Qwen GSM8K finite-difference diagnostic on CUDA."""
+    """Run the pinned optimized-HF GSM8K finite-difference diagnostic on CUDA.
+
+    The original ``model_name``, ``max_tokens``, and ``directions`` keyword
+    interface remains valid.  New keyword-only controls expose every model and
+    data setting that must be pinned for the optimized diagnostic artifact.
+    """
 
     if isinstance(max_tokens, bool) or not isinstance(max_tokens, int) or max_tokens < 1:
         raise ValueError("max_tokens must be a positive integer")
     if isinstance(directions, bool) or not isinstance(directions, int) or directions < 1:
         raise ValueError("directions must be a positive integer")
-    defaults = GSM8KExperimentConfig()
-    selected_model = defaults.model_name if model_name is None else model_name
+    for name, value in (("adapter_rank", adapter_rank), ("adapter_layers", adapter_layers)):
+        if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+            raise ValueError(f"{name} must be a positive integer")
+    for name, value in (
+        ("model_revision", model_revision),
+        ("dataset_revision", dataset_revision),
+    ):
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"{name} must be a non-empty string")
+    validate_attention_implementation(attention_implementation)
+    if not isinstance(use_frozen_prefix_scoring, bool):
+        raise TypeError("use_frozen_prefix_scoring must be boolean")
+
+    defaults = GSM8KExperimentConfig(
+        min_reasoning_lines=0,
+        max_reasoning_lines=1000,
+        max_answer_magnitude=1e18,
+        max_prompt_tokens=DEFAULT_MAX_PROMPT_TOKENS,
+        scoring_micro_batch_size=DEFAULT_SCORING_MICRO_BATCH_SIZE,
+    )
+    selected_model = DEFAULT_MODEL_NAME if model_name is None else model_name
     if not isinstance(selected_model, str) or not selected_model.strip():
         raise ValueError("model_name must be a non-empty string")
     if not torch.cuda.is_available():
@@ -450,13 +610,17 @@ def run_gsm8k_diagnostics(
     started = time.perf_counter()
     source_audit = audit_sequence_forward_only_source()
     calibration_examples, rollout_examples, official_train_size = _load_fixed_train_examples(
-        defaults
+        defaults,
+        dataset_revision=dataset_revision,
     )
 
     # Match the Qwen chat formatting used by the benchmark before calibration.
     from transformers import AutoTokenizer
 
-    calibration_tokenizer = AutoTokenizer.from_pretrained(selected_model)
+    calibration_tokenizer = AutoTokenizer.from_pretrained(
+        selected_model,
+        revision=model_revision,
+    )
     if calibration_tokenizer.pad_token_id is None:
         calibration_tokenizer.pad_token = calibration_tokenizer.eos_token
     calibration_tokenizer.padding_side = "left"
@@ -466,11 +630,18 @@ def run_gsm8k_diagnostics(
         model_name=selected_model,
         calibration_prompts=calibration_prompts,
         candidates=CANDIDATE_ACTIONS[:4],
-        adapter_rank=defaults.adapter_rank,
-        adapter_layers=defaults.adapter_layers,
+        adapter_rank=adapter_rank,
+        adapter_layers=adapter_layers,
         adapter_scale=defaults.adapter_scale,
         dtype=defaults.dtype,
         device=defaults.device,
+        revision=model_revision,
+        attention_implementation=attention_implementation,
+    )
+    model_runtime = _model_runtime_metadata(
+        bundle,
+        requested_revision=model_revision,
+        requested_attention_implementation=attention_implementation,
     )
     prompts = _chat_prompts(bundle.tokenizer, rollout_examples)
     rollout = generate_sequence_rollouts(
@@ -483,6 +654,13 @@ def run_gsm8k_diagnostics(
         max_prompt_tokens=defaults.max_prompt_tokens,
         seed=DIAGNOSTIC_SEED,
         scoring_micro_batch_size=defaults.scoring_micro_batch_size,
+        use_frozen_prefix_scoring=use_frozen_prefix_scoring,
+    )
+    behavior_counters = _teacher_forced_call_counters(
+        rollout,
+        policy_evaluations=1,
+        scoring_micro_batch_size=defaults.scoring_micro_batch_size,
+        include_prefix_build=True,
     )
     rollout_rows, exact_rewards = _rollout_rows(rollout_examples, rollout)
     reward_statistics = reward_group_statistics(
@@ -499,6 +677,11 @@ def run_gsm8k_diagnostics(
         clip_epsilon=0.2,
         scoring_micro_batch_size=defaults.scoring_micro_batch_size,
     )
+    oracle_counters = _teacher_forced_call_counters(
+        rollout,
+        policy_evaluations=1,
+        scoring_micro_batch_size=defaults.scoring_micro_batch_size,
+    )
     generator = torch.Generator(device=bundle.device).manual_seed(DIAGNOSTIC_SEED + 1)
     basis = make_search_basis(
         center.numel(),
@@ -510,6 +693,7 @@ def run_gsm8k_diagnostics(
     capture = random_subspace_capture(exact_gradient, basis)
 
     finite_difference_results: list[dict[str, Any]] = []
+    finite_difference_call_counters: list[dict[str, int]] = []
     for mu in FINITE_DIFFERENCE_MUS:
         statistics, policy_evaluations = directional_sequence_score_statistics(
             bundle,
@@ -520,6 +704,12 @@ def run_gsm8k_diagnostics(
             length_normalize=True,
             scoring_micro_batch_size=defaults.scoring_micro_batch_size,
         )
+        call_counters = _teacher_forced_call_counters(
+            rollout,
+            policy_evaluations=policy_evaluations,
+            scoring_micro_batch_size=defaults.scoring_micro_batch_size,
+        )
+        finite_difference_call_counters.append(call_counters)
         reconstructed_gradient = basis @ statistics.gradient
         finite_difference_results.append(
             {
@@ -527,6 +717,7 @@ def run_gsm8k_diagnostics(
                 "policy_evaluations": policy_evaluations,
                 "teacher_forced_examples": policy_evaluations * rollout.environment_samples,
                 "scored_tokens": policy_evaluations * rollout.valid_response_tokens,
+                **call_counters,
                 "projected_gradient_coordinates": statistics.gradient,
                 "agreement_with_exact_projected_gradient": vector_agreement(
                     exact_projected_coordinates,
@@ -543,6 +734,17 @@ def run_gsm8k_diagnostics(
                 ),
             }
         )
+
+    aggregate_finite_difference_counters = _sum_call_counters(
+        *finite_difference_call_counters
+    )
+    prefix_cache = _prefix_cache_metadata(
+        rollout,
+        requested=use_frozen_prefix_scoring,
+        behavior_counters=behavior_counters,
+        oracle_counters=oracle_counters,
+        finite_difference_counters=aggregate_finite_difference_counters,
+    )
 
     eligible = [
         result
@@ -566,7 +768,7 @@ def run_gsm8k_diagnostics(
         device_index = torch.cuda.current_device()
 
     report: dict[str, Any] = {
-        "schema_version": 1,
+        "schema_version": 2,
         "diagnostic": "real_model_gsm8k_projected_finite_difference",
         "purpose": (
             "Backprop is used once as a non-updating oracle; the compared production "
@@ -576,15 +778,17 @@ def run_gsm8k_diagnostics(
             "name": bundle.model_name,
             "dtype": defaults.dtype,
             "device": str(bundle.device),
-            "adapter_rank": defaults.adapter_rank,
-            "adapter_layers": defaults.adapter_layers,
+            "adapter_rank": adapter_rank,
+            "adapter_layers": adapter_layers,
             "adapter_parameter_count": bundle.parameter_count,
             "adapter_names": bundle.adapter_names,
+            **model_runtime,
         },
         "dataset": {
             "id": GSM8K_DATASET_ID,
             "config": GSM8K_DATASET_CONFIG,
             "split": GSM8K_TRAIN_SPLIT,
+            "revision": dataset_revision,
             "official_train_only": True,
             "official_train_examples": official_train_size,
             "selection_seed": DIAGNOSTIC_SEED,
@@ -596,12 +800,14 @@ def run_gsm8k_diagnostics(
             "group_size": rollout.group_size,
             "environment_samples": rollout.environment_samples,
             "max_new_tokens": max_tokens,
+            "max_prompt_tokens": defaults.max_prompt_tokens,
             "valid_response_tokens": rollout.valid_response_tokens,
             "sampling_temperature": rollout.sampling_temperature,
             "numeric_shaping_weight": defaults.numeric_shaping_weight,
             "reward_statistics": reward_statistics,
             "samples": rollout_rows,
         },
+        "frozen_prefix_scoring": prefix_cache,
         "exact_backprop_oracle": {
             "objective": "length-normalized token-clipped GRPO surrogate at policy center",
             "clip_epsilon": 0.2,
@@ -623,6 +829,11 @@ def run_gsm8k_diagnostics(
         "integrity": {
             "parameters_unchanged_after_all_probes": final_parameters_unchanged,
             "source_audit_passed": source_audit.passed,
+            "model_revision_matches_requested": model_runtime["revision_matches_requested"],
+            "attention_matches_requested": model_runtime["attention_matches_requested"],
+            "requested_prefix_cache_active": (
+                not use_frozen_prefix_scoring or prefix_cache["active"]
+            ),
         },
         "environment": {
             "python": platform.python_version(),
@@ -630,11 +841,18 @@ def run_gsm8k_diagnostics(
             "cuda_runtime": torch.version.cuda,
             "gpu": torch.cuda.get_device_name(device_index),
             "hostname": platform.node(),
+            "flash_attn": model_runtime["installed_flash_attn_version"],
         },
         "elapsed_seconds": elapsed,
     }
+    revision_match = model_runtime["revision_matches_requested"]
     report["passed"] = bool(
-        source_audit.passed and parameters_unchanged and final_parameters_unchanged
+        source_audit.passed
+        and parameters_unchanged
+        and final_parameters_unchanged
+        and model_runtime["attention_matches_requested"]
+        and revision_match is not False
+        and (not use_frozen_prefix_scoring or prefix_cache["active"])
     )
     return _json_safe(report)
 
@@ -652,13 +870,43 @@ def _positive_integer(text: str) -> int:
 def build_parser() -> argparse.ArgumentParser:
     """Build the standalone real-model diagnostic argument parser."""
 
-    defaults = GSM8KExperimentConfig()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True, help="JSON artifact path")
     parser.add_argument(
         "--model",
-        default=defaults.model_name,
-        help=f"Hugging Face Qwen model (default: {defaults.model_name})",
+        default=DEFAULT_MODEL_NAME,
+        help=f"Hugging Face Qwen model (default: {DEFAULT_MODEL_NAME})",
+    )
+    parser.add_argument(
+        "--model-revision",
+        default=DEFAULT_MODEL_REVISION,
+        help="pinned Hugging Face model commit",
+    )
+    parser.add_argument(
+        "--dataset-revision",
+        default=DEFAULT_DATASET_REVISION,
+        help="pinned Hugging Face GSM8K dataset commit",
+    )
+    parser.add_argument(
+        "--attention-implementation",
+        choices=ATTENTION_IMPLEMENTATIONS,
+        default=DEFAULT_ATTENTION_IMPLEMENTATION,
+        help=(
+            "Hugging Face attention implementation "
+            f"(default: {DEFAULT_ATTENTION_IMPLEMENTATION})"
+        ),
+    )
+    parser.add_argument(
+        "--adapter-rank",
+        type=_positive_integer,
+        default=DEFAULT_ADAPTER_RANK,
+        help=f"residual-core adapter rank (default: {DEFAULT_ADAPTER_RANK})",
+    )
+    parser.add_argument(
+        "--adapter-layers",
+        type=_positive_integer,
+        default=DEFAULT_ADAPTER_LAYERS,
+        help=f"number of adapted final decoder layers (default: {DEFAULT_ADAPTER_LAYERS})",
     )
     parser.add_argument(
         "--max-tokens",
@@ -672,6 +920,23 @@ def build_parser() -> argparse.ArgumentParser:
         default=SEARCH_DIRECTIONS,
         help=f"orthonormal search directions (default: {SEARCH_DIRECTIONS})",
     )
+    prefix_group = parser.add_mutually_exclusive_group()
+    prefix_group.add_argument(
+        "--frozen-prefix-scoring",
+        "--use-frozen-prefix-scoring",
+        dest="use_frozen_prefix_scoring",
+        action="store_true",
+        help="cache the exact frozen decoder prefix for teacher-forced scoring",
+    )
+    prefix_group.add_argument(
+        "--no-frozen-prefix-scoring",
+        dest="use_frozen_prefix_scoring",
+        action="store_false",
+        help="rescore fixed responses through the full model",
+    )
+    parser.set_defaults(
+        use_frozen_prefix_scoring=DEFAULT_USE_FROZEN_PREFIX_SCORING,
+    )
     return parser
 
 
@@ -679,8 +944,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     arguments = build_parser().parse_args(argv)
     report = run_gsm8k_diagnostics(
         model_name=arguments.model,
+        model_revision=arguments.model_revision,
+        dataset_revision=arguments.dataset_revision,
+        attention_implementation=arguments.attention_implementation,
+        adapter_rank=arguments.adapter_rank,
+        adapter_layers=arguments.adapter_layers,
         max_tokens=arguments.max_tokens,
         directions=arguments.directions,
+        use_frozen_prefix_scoring=arguments.use_frozen_prefix_scoring,
     )
     output = write_gsm8k_diagnostic_results(arguments.output, report)
     print(output)
@@ -693,7 +964,16 @@ if __name__ == "__main__":  # pragma: no cover - exercised on the remote GPU
 
 __all__ = [
     "CALIBRATION_EXAMPLES",
+    "DEFAULT_ADAPTER_LAYERS",
+    "DEFAULT_ADAPTER_RANK",
+    "DEFAULT_ATTENTION_IMPLEMENTATION",
+    "DEFAULT_DATASET_REVISION",
+    "DEFAULT_MAX_PROMPT_TOKENS",
     "DEFAULT_MAX_TOKENS",
+    "DEFAULT_MODEL_NAME",
+    "DEFAULT_MODEL_REVISION",
+    "DEFAULT_SCORING_MICRO_BATCH_SIZE",
+    "DEFAULT_USE_FROZEN_PREFIX_SCORING",
     "DIAGNOSTIC_SEED",
     "FINITE_DIFFERENCE_MUS",
     "ROLLOUT_BATCH_SIZE",

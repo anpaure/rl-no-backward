@@ -1,0 +1,20 @@
+{
+  "accepted": true,
+  "backward_calls": 4,
+  "empirical_kl": 0.0004782296600751579,
+  "environment_samples": 32,
+  "forward_calls": 8,
+  "grpo_loss_after": -0.007263455539941788,
+  "grpo_loss_before": -0.0072710029780864716,
+  "grpo_objective_after": 0.007263455539941788,
+  "grpo_objective_before": 0.0072710029780864716,
+  "optimizer_wall_time_seconds": 1.032747538993135,
+  "policy_evaluations": 2,
+  "projected_gradient_norm": 0.02212737500667572,
+  "reward_mean": 0.9375,
+  "scored_tokens": 13482,
+  "step_norm": 0.0062907361425459385,
+  "surrogate_improvement": -7.547438144683838e-06,
+  "teacher_forced_examples": 64,
+  "zero_advantage_fraction": 0.5
+}

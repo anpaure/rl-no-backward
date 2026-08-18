@@ -1,0 +1,118 @@
+{
+  "schema_version": 1,
+  "method": "base",
+  "seed": 0,
+  "resolved_model_snapshot": "/home/amodo/.cache/huggingface/hub/models--Qwen--Qwen2.5-1.5B-Instruct/snapshots/989aa7980e4cf806f80c7fef2b1adb7bc71aa306",
+  "shared_initialization_digest": "fc61cc8ca79ddb4d1964b2fa12710e983fb76ced22cf848b4ba57f6a1d011089",
+  "frozen_base_parameter_digest_before": "6ce080d42e572f097f6d52e7b802e3e5a124d4ddd9a8262e120a21ed915e7012",
+  "frozen_base_parameter_digest_after": "6ce080d42e572f097f6d52e7b802e3e5a124d4ddd9a8262e120a21ed915e7012",
+  "vllm_lora_reload_receipts": [
+    {
+      "version": 1,
+      "policy_version": "same-id-reload-gate/initial",
+      "state_digest": "fc61cc8ca79ddb4d1964b2fa12710e983fb76ced22cf848b4ba57f6a1d011089",
+      "adapter_model_sha256": "fa04840b7589b0e646d420c6591c1e8671a800019ca83e9f0cbc52867356a956",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/base_seed0/adapter-000001-fc61cc8ca79d",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 2,
+      "policy_version": "same-id-reload-gate/changed",
+      "state_digest": "44e0a7f2071040f7b52b100d23fa622ded775e11672bdfc9404ba19a8ac92ca4",
+      "adapter_model_sha256": "6a74848a95e77133a7f1bba8dd6dfaeda1cef9b8175d64984f255134d2602da3",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/base_seed0/adapter-000002-44e0a7f20710",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 3,
+      "policy_version": "same-id-reload-gate/restored",
+      "state_digest": "fc61cc8ca79ddb4d1964b2fa12710e983fb76ced22cf848b4ba57f6a1d011089",
+      "adapter_model_sha256": "fa04840b7589b0e646d420c6591c1e8671a800019ca83e9f0cbc52867356a956",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/base_seed0/adapter-000003-fc61cc8ca79d",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 4,
+      "policy_version": "base/seed=0/initial-eval/step=0",
+      "state_digest": "fc61cc8ca79ddb4d1964b2fa12710e983fb76ced22cf848b4ba57f6a1d011089",
+      "adapter_model_sha256": "fa04840b7589b0e646d420c6591c1e8671a800019ca83e9f0cbc52867356a956",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/base_seed0/adapter-000004-fc61cc8ca79d",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    }
+  ],
+  "vllm_same_id_reload_gate": {
+    "passed": true,
+    "lora_int_id": 1,
+    "changed_lora_b_tensor_count": 56,
+    "perturbation": 0.05,
+    "initial": {
+      "policy_version": "same-id-reload-gate/initial",
+      "state_digest": "fc61cc8ca79ddb4d1964b2fa12710e983fb76ced22cf848b4ba57f6a1d011089",
+      "token_id": 1249,
+      "selected_token_logprob": -0.5263524055480957
+    },
+    "changed": {
+      "policy_version": "same-id-reload-gate/changed",
+      "state_digest": "44e0a7f2071040f7b52b100d23fa622ded775e11672bdfc9404ba19a8ac92ca4",
+      "token_id": 1249,
+      "selected_token_logprob": -0.7200657725334167
+    },
+    "restored": {
+      "policy_version": "same-id-reload-gate/restored",
+      "state_digest": "fc61cc8ca79ddb4d1964b2fa12710e983fb76ced22cf848b4ba57f6a1d011089",
+      "token_id": 1249,
+      "selected_token_logprob": -0.5263524055480957
+    },
+    "restored_selected_logprob_abs_difference": 0.0
+  },
+  "process_isolation": "fresh_python_process_per_method_seed",
+  "process_id": 3071948,
+  "source_commit_verified_in_child": "69f1fcd21e8d94427dd769c7c03791021602627a",
+  "memory_measurement_scope": {
+    "allocator": "PyTorch CUDA allocator",
+    "scope": "combined HF scorer/trainer plus colocated vLLM engine in child process",
+    "vllm_worker_excluded": false
+  },
+  "fo_reverse_mode_modules_called": null,
+  "fo_backprop_module_imported": null
+}

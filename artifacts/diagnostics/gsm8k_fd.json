@@ -1,0 +1,368 @@
+{
+  "dataset": {
+    "calibration_example_ids": [
+      "94cf7cbe2110cd2344e8",
+      "429894ce2eec986ca9c7",
+      "5dc175a659e890634809",
+      "8eddc932216d1aeb749d",
+      "ce319611b51823c1e53a",
+      "88990a274bd3304585ef",
+      "36c4bc6f373e779b8425",
+      "0cf70f39fdea4345f38c"
+    ],
+    "config": "main",
+    "id": "openai/gsm8k",
+    "official_train_examples": 7473,
+    "official_train_only": true,
+    "rollout_example_ids": [
+      "4929d92bfd92d94c9948",
+      "bf00b4ef7b6f098480cb"
+    ],
+    "selection_seed": 2026,
+    "split": "train"
+  },
+  "diagnostic": "real_model_gsm8k_projected_finite_difference",
+  "elapsed_seconds": 18.45504918298684,
+  "environment": {
+    "cuda_runtime": "13.0",
+    "gpu": "NVIDIA H100 PCIe",
+    "hostname": "arboghast",
+    "python": "3.12.3",
+    "torch": "2.13.0+cu130"
+  },
+  "exact_backprop_oracle": {
+    "backward_calls": 1,
+    "clip_epsilon": 0.2,
+    "gradient_l2_norm": 0.03312787786126137,
+    "objective": "length-normalized token-clipped GRPO surrogate at policy center",
+    "optimizer_steps": 0,
+    "parameters_unchanged_after_backward": true,
+    "projected_gradient_coordinates": [
+      0.002259616507217288,
+      3.59115656465292e-05,
+      0.0014260555617511272,
+      -0.0011308910325169563,
+      -0.0004048505797982216,
+      0.0012452907394617796,
+      -0.0019669656176120043,
+      0.0023180025164037943
+    ],
+    "surrogate_value": 0.0
+  },
+  "finite_difference": {
+    "best_mu_by_projected_relative_l2_error": 2.0,
+    "directions": 8,
+    "mus": [
+      0.25,
+      0.5,
+      1.0,
+      2.0
+    ],
+    "results": [
+      {
+        "agreement_with_exact_projected_gradient": {
+          "absolute_l2_error": 0.003256067496778214,
+          "cosine_similarity": 0.6996036346105289,
+          "estimate_l2_norm": 0.003921726006877523,
+          "estimate_nonzero": true,
+          "reference_l2_norm": 0.004401868673363501,
+          "reference_nonzero": true,
+          "relative_l2_error": 0.7397011901970779
+        },
+        "agreement_with_full_backprop_gradient": {
+          "absolute_l2_error": 0.03299517938889727,
+          "cosine_similarity": 0.09295987546940107,
+          "estimate_l2_norm": 0.003921726251039269,
+          "estimate_nonzero": true,
+          "reference_l2_norm": 0.033127878529479925,
+          "reference_nonzero": true,
+          "relative_l2_error": 0.9959943362970083
+        },
+        "fisher": {
+          "correct_token_fisher_trace": 0.10700081021424226,
+          "correct_trace_nonzero": true,
+          "legacy_completion_outer_fisher_trace": 0.00127081664579074,
+          "legacy_completion_score_normalization": "mean_token_score",
+          "legacy_to_correct_trace_ratio": 0.011876701150638474
+        },
+        "mu": 0.25,
+        "policy_evaluations": 16,
+        "projected_gradient_coordinates": [
+          0.000820039538666606,
+          0.00029777269810438156,
+          0.0022385946940630674,
+          -0.0007433945429511368,
+          -0.0015874425880610943,
+          0.002153310924768448,
+          0.00016042671632021666,
+          0.0013683571014553308
+        ],
+        "scored_tokens": 22848,
+        "teacher_forced_examples": 128
+      },
+      {
+        "agreement_with_exact_projected_gradient": {
+          "absolute_l2_error": 0.001755974895342739,
+          "cosine_similarity": 0.9239974045646207,
+          "estimate_l2_norm": 0.003567262041226538,
+          "estimate_nonzero": true,
+          "reference_l2_norm": 0.004401868673363501,
+          "reference_nonzero": true,
+          "relative_l2_error": 0.3989157845549684
+        },
+        "agreement_with_full_backprop_gradient": {
+          "absolute_l2_error": 0.03288104828266553,
+          "cosine_similarity": 0.12277620407825408,
+          "estimate_l2_norm": 0.0035672621419149146,
+          "estimate_nonzero": true,
+          "reference_l2_norm": 0.033127878529479925,
+          "reference_nonzero": true,
+          "relative_l2_error": 0.992549168320732
+        },
+        "fisher": {
+          "correct_token_fisher_trace": 0.08217010919355741,
+          "correct_trace_nonzero": true,
+          "legacy_completion_outer_fisher_trace": 0.0010533396614327006,
+          "legacy_completion_score_normalization": "mean_token_score",
+          "legacy_to_correct_trace_ratio": 0.012819012555423113
+        },
+        "mu": 0.5,
+        "policy_evaluations": 16,
+        "projected_gradient_coordinates": [
+          0.0012212884612381458,
+          -0.00014346296666190028,
+          0.00068294582888484,
+          -0.0010143698891624808,
+          0.0006126114167273045,
+          0.0007214867509901524,
+          -0.001682477304711938,
+          0.0024477140977978706
+        ],
+        "scored_tokens": 22848,
+        "teacher_forced_examples": 128
+      },
+      {
+        "agreement_with_exact_projected_gradient": {
+          "absolute_l2_error": 0.0011100835990977755,
+          "cosine_similarity": 0.9686650954505333,
+          "estimate_l2_norm": 0.004456271104007532,
+          "estimate_nonzero": true,
+          "reference_l2_norm": 0.004401868673363501,
+          "reference_nonzero": true,
+          "relative_l2_error": 0.2521846246379614
+        },
+        "agreement_with_full_backprop_gradient": {
+          "absolute_l2_error": 0.032852886801027714,
+          "cosine_similarity": 0.12871143623753825,
+          "estimate_l2_norm": 0.0044562712863977305,
+          "estimate_nonzero": true,
+          "reference_l2_norm": 0.033127878529479925,
+          "reference_nonzero": true,
+          "relative_l2_error": 0.9916990842559538
+        },
+        "fisher": {
+          "correct_token_fisher_trace": 0.07560690574391202,
+          "correct_trace_nonzero": true,
+          "legacy_completion_outer_fisher_trace": 0.0010567188614838295,
+          "legacy_completion_score_normalization": "mean_token_score",
+          "legacy_to_correct_trace_ratio": 0.013976486024478235
+        },
+        "mu": 1.0,
+        "policy_evaluations": 16,
+        "projected_gradient_coordinates": [
+          0.0022944677621126175,
+          -0.00029435160104185343,
+          0.0008741207420825958,
+          -0.0008092963835224509,
+          -0.000667186570353806,
+          0.0009373072534799576,
+          -0.0026854961179196835,
+          0.0021336604841053486
+        ],
+        "scored_tokens": 22848,
+        "teacher_forced_examples": 128
+      },
+      {
+        "agreement_with_exact_projected_gradient": {
+          "absolute_l2_error": 0.0007240414442807573,
+          "cosine_similarity": 0.9866212590387097,
+          "estimate_l2_norm": 0.0042468561172361845,
+          "estimate_nonzero": true,
+          "reference_l2_norm": 0.004401868673363501,
+          "reference_nonzero": true,
+          "relative_l2_error": 0.1644850171614756
+        },
+        "agreement_with_full_backprop_gradient": {
+          "absolute_l2_error": 0.032842109004761,
+          "cosine_similarity": 0.1310973543098463,
+          "estimate_l2_norm": 0.004246856319739048,
+          "estimate_nonzero": true,
+          "reference_l2_norm": 0.033127878529479925,
+          "reference_nonzero": true,
+          "relative_l2_error": 0.9913737450931358
+        },
+        "fisher": {
+          "correct_token_fisher_trace": 0.0721842850119837,
+          "correct_trace_nonzero": true,
+          "legacy_completion_outer_fisher_trace": 0.0009523987363148627,
+          "legacy_completion_score_normalization": "mean_token_score",
+          "legacy_to_correct_trace_ratio": 0.013193990023683823
+        },
+        "mu": 2.0,
+        "policy_evaluations": 16,
+        "projected_gradient_coordinates": [
+          0.0023092329502105713,
+          4.9024238251149654e-05,
+          0.0013592704199254513,
+          -0.0012945980997756124,
+          -0.0003339524846524,
+          0.000568883609957993,
+          -0.0018022883450612426,
+          0.0023438921198248863
+        ],
+        "scored_tokens": 22848,
+        "teacher_forced_examples": 128
+      }
+    ]
+  },
+  "integrity": {
+    "parameters_unchanged_after_all_probes": true,
+    "source_audit_passed": true
+  },
+  "model": {
+    "adapter_layers": 4,
+    "adapter_names": [
+      "model.layers.24.adapter.core",
+      "model.layers.25.adapter.core",
+      "model.layers.26.adapter.core",
+      "model.layers.27.adapter.core"
+    ],
+    "adapter_parameter_count": 256,
+    "adapter_rank": 8,
+    "device": "cuda",
+    "dtype": "bfloat16",
+    "name": "Qwen/Qwen2.5-1.5B-Instruct"
+  },
+  "passed": true,
+  "purpose": "Backprop is used once as a non-updating oracle; the compared production optimizer path remains forward-only.",
+  "random_subspace": {
+    "basis_orthonormality_max_error": 3.398661965192673e-07,
+    "captured_squared_norm_fraction": 0.01765578280600396,
+    "directions": 8,
+    "expected_isotropic_squared_norm_fraction": 0.03125,
+    "full_gradient_l2_norm": 0.033127878529479925,
+    "parameter_count": 256,
+    "projected_gradient_l2_norm": 0.004401869001354687
+  },
+  "rollout": {
+    "batch_size": 2,
+    "environment_samples": 8,
+    "group_size": 4,
+    "max_new_tokens": 512,
+    "numeric_shaping_weight": 0.1,
+    "reward_statistics": {
+      "exact_reward_rate": 0.5,
+      "group_size": 4,
+      "nonzero_reward_fraction": 1.0,
+      "prompt_groups": 2,
+      "reward_max": 1.0,
+      "reward_mean": 0.5257067631464452,
+      "reward_min": 0.01666666753590107,
+      "reward_std_population": 0.47471149159360554,
+      "samples": 8,
+      "zero_advantage_group_fraction": 0.0,
+      "zero_advantage_groups": 0,
+      "zero_reward_fraction": 0.0
+    },
+    "samples": [
+      {
+        "completions": [
+          {
+            "exact_reward": 1.0,
+            "extracted_answer": "450",
+            "group_index": 0,
+            "response_tokens": 177,
+            "shaped_reward": 1.0,
+            "text": "Let's break down the increase in cows over the next two years:\n\n1. **After one year**\n   - The initial number of cows is 200.\n   - The number increases by half of the current number: \\( \\frac{200}{2} = 100 \\).\n\n**Total after one year:** \n\\[ 200 + 100 = 300 \\]\n\n2. **After two years**\n   - Now there are 300 cows.\n   - The number increases again by half of this new total: \\( \\frac{300}{2} = 150 \\).\n\n**Total after two years:** \n\\[ 300 + 150 = 450 \\]\n\nSo, in two years, the rancher will own 450 cows."
+          },
+          {
+            "exact_reward": 1.0,
+            "extracted_answer": "450",
+            "group_index": 1,
+            "response_tokens": 253,
+            "shaped_reward": 1.0,
+            "text": "To solve this grade-school level mathematics problem, we'll break it down into steps:\n\n1. **Initial Condition**: \n   - Happy Cattle Ranch starts with 200 cows.\n\n2. **First Year Increase**:\n   - In the first year, the number of new calves born equals half the current number of cows.\n   - Number of new calves = \\( \\frac{1}{2} \\times 200 = 100 \\)\n   - Total at the end of the first year = Initial cows + New calves\n     \\( = 200 + 100 = 300 \\) \n\n3. **Second Year Increase**:\n   - The second year sees the same process as before (new calves equal half the current number).\n   - Number of new calves = \\( \\frac{1}{2} \\times 300 = 150 \\)\n   - Total at the end of the second year = From the previous year's total + New calves\n     \\( = 300 + 150 = 450 \\)\n\nTherefore, after two years, the total number of cows on Happy Cattle Ranch would be **450**."
+          },
+          {
+            "exact_reward": 0.0,
+            "extracted_answer": "300",
+            "group_index": 2,
+            "response_tokens": 142,
+            "shaped_reward": 0.06674057990312576,
+            "text": "In the first year, the number of cows increases by half the current number. Half of 200 is 100/2 = 50.\nIf the ride, the original number of cows and the increase are added together we get 200+50=250 cows for the start of the next year.\n\nThen in the second year, the rise in cows again goes up by half the previous year's total. Half of 250 is 100/2 = 50\nThe starting number plus the growth is now 250+50 = 300 cows\n\nTherefore, Final answer: 300"
+          },
+          {
+            "exact_reward": 0.0,
+            "extracted_answer": "400",
+            "group_index": 3,
+            "response_tokens": 248,
+            "shaped_reward": 0.08891352266073227,
+            "text": "To solve this problem, let's break it down step-by-step:\n\n1. **Initial Condition**: The ranch has 200 cows.\n   \n2. **First Year**:\n   - After one year, the amount of offspring from the mothers increases the herd by half the current population.\n   - Number of new calves born = \\( \\frac{200}{2} = 100 \\)\n   - Total number of cows at the end of the first year = \\( 200 + 100 = 300 \\)\n\n3. **Second Year**:\n   - Again after one year, another round of reproduction occurs.\n   - The number of new calves born in the second year is half the total from the start of the second year (which is still 200):\n   - New calves for the second year: \\( \\frac{200}{2} = 100 \\)\n   - Total number of cows at the end of the second year = \\( 300 + 100 = 400 \\)\n\nTherefore, the rancher will own 400 cows in two years.\n\nFinal answer: 400"
+          }
+        ],
+        "example_id": "4929d92bfd92d94c9948",
+        "question": "Happy Cattle Ranch is home to 200 cows. Every year, the mother cows have enough calves that the number of cows the rancher owns rises by half the number of cows living on the ranch. If the rancher does not buy or sell any cows, how many cows will the rancher own on Happy Cattle Ranch in two years?",
+        "reference_answer": "450",
+        "source_index": 3294
+      },
+      {
+        "completions": [
+          {
+            "exact_reward": 1.0,
+            "extracted_answer": "5",
+            "group_index": 0,
+            "response_tokens": 99,
+            "shaped_reward": 1.0,
+            "text": "First find the amount of paint Mike uses: 3 square feet + 2 square feet = 5 square feet\nThen add the amounts used by Mary and Mike to find the total area they've painted: 3 square feet + 5 square feet = 8 square feet\nSubtract the total area painted from the original amount to find the remaining area: 13 square feet - 8 square feet = 5 square feet\n\nTherefore, the final answer is 5."
+          },
+          {
+            "exact_reward": 0.0,
+            "extracted_answer": "-1",
+            "group_index": 1,
+            "response_tokens": 270,
+            "shaped_reward": 0.03333333507180214,
+            "text": "First, we determine the amount of paint Mike used:\n\n\\[ \\text{Mike's paint} = \\text{Mary's paint} + 2 \\]\n\\[ \\text{Mike's paint} = 3 + 2 \\]\n\\[ \\text{Mike's paint} = 5 \\]\n\nNext, we calculate the total amount of paint spent by both Mary and Mike:\n\n\\[ \\text{Total paint spent} = \\text{Mary's paint} + \\text{Mike's paint} \\]\n\\[ \\text{Total paint spent} = 3 + 5 \\]\n\\[ \\text{Total paint spent} = 8 \\]\n\nFinally, we subtract the total paint already used from the original amount to find out how much paint is left for painting the sun:\n\n\\[ \\text{Paint left to paint sun} = \\text{Original paint} - \\text{Total paint spent} \\]\n\\[ \\text{Paint left to paint sun} = 13 - 8 \\]\n\\[ \\text{Paint left to paint sun} = -1 \\]\n\nThe calculation results in a negative value (-1), which means that there isn't any paint available to paint the sun; they have run out of paint before even starting! Therefore,\n\n**Final answer:** There is no paint left to paint the sun."
+          },
+          {
+            "exact_reward": 1.0,
+            "extracted_answer": "5",
+            "group_index": 2,
+            "response_tokens": 110,
+            "shaped_reward": 1.0,
+            "text": "First find how much paint Mike uses to paint the castle: 3 square feet + 2 square feet = 5 square feet\nThen add the amount of paint each person already used to find the total amount used so far: 5 square feet + 3 square feet = 8 square feet\nFinally, subtract the total amount they've already painted from the original amount of paint to find out how much is left for the sun: 13 square feet - 8 square feet = 5 square feet\n\nFinal answer: 5"
+          },
+          {
+            "exact_reward": 0.0,
+            "extracted_answer": "0",
+            "group_index": 3,
+            "response_tokens": 129,
+            "shaped_reward": 0.01666666753590107,
+            "text": "First find how much paint Mike used for his castle: 3 square feet + 2 square feet = 5 square feet\nThen add the amount they used individually to find total amount painted: 5 square feet + 3 square feet = 8 square feet\n\nNow subtract the amount used by Mary and Mike from the original amount of paint to find out how much is left:\n\n$13 \\text{ square feet} - (3 \\text{ square feet} + 5 \\text{ square feet}) = 0\\text{ square feet}$\n\nSo the final answer is $0\\text{ square feet}$."
+          }
+        ],
+        "example_id": "bf00b4ef7b6f098480cb",
+        "question": "Mary and Mike are sharing a jar of paint. Mary paints a dragon using 3 square feet worth of paint. Mike paints a castle using 2 square feet more paint than Mary used on her dragon. They both then work together to paint the biggest sun possible. If there was originally enough paint in the jar to cover 13 square feet, how many square feet of paint can be used to paint the sun?",
+        "reference_answer": "5",
+        "source_index": 1604
+      }
+    ],
+    "sampling_temperature": 0.8,
+    "valid_response_tokens": 1428
+  },
+  "schema_version": 1,
+  "source_audit": {
+    "passed": true,
+    "source_path": "/home/amodo/rl-no-backward/src/rl_no_backward/sequence_forward_only.py",
+    "violations": []
+  }
+}

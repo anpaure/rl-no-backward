@@ -1,0 +1,12 @@
+{
+  "checkpoint_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/checkpoints/gsm8k_fo_npg_seed0.pt",
+  "method": "fo_npg",
+  "schema": "rl-no-backward-validation-selection-v1",
+  "seed": 0,
+  "selected_lora_state_digest": "4e6e35eeb9703baeb9d79486b27b6cae422467135ce816cbc2f9941b3396b3b6",
+  "selected_step": 20,
+  "selection_metric": "exact_match",
+  "selection_split": "development",
+  "selection_val_accuracy": 0.69140625,
+  "tie_breaker": "latest_checkpoint"
+}

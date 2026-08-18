@@ -1,0 +1,87 @@
+# Standard LoRA GRPO vs. forward-only RL on GSM8K
+
+## Status
+
+The corrected matched experiment is in its predeclared integration and
+learning-gate phase. Final results are intentionally pending.
+
+The headline comparison is now ordinary GRPO versus strict forward-only NPG
+over the **same** standard PEFT LoRA policy: Qwen2.5-1.5B-Instruct, `q_proj` and
+`v_proj` in all 28 blocks, rank 8, alpha 16, exactly 1,089,536 policy
+parameters. Both methods use the same initialization artifact, prompt and
+rollout seeds, exact GSM8K reward, vLLM/FlashAttention-2 generation backend,
+Hugging Face old-policy scores, response budget, and development examples.
+
+The frozen-batch GRPO objective is differentially checked against upstream TRL
+1.10. The no-backward optimizer estimates the same objective's projected
+derivatives by symmetric inference-only rescoring and uses a token-local
+Fisher/KL trust region. A real-model finite-difference-versus-backprop
+diagnostic must pass before training results are accepted.
+
+## Pilot evidence retained, not promoted
+
+The repository preserves two useful but non-headline artifact sets:
+
+| Artifact | What it establishes | Why it is not the answer |
+|---|---|---|
+| `pilot_residual_core_v3` | H100/vLLM/FA2 performance, provenance, zero FO backward calls, long-run telemetry | Custom 256-scalar residual adapter and an incorrect PPO old-policy denominator |
+| `reference_trl_lora_overfit25` | Genuine all-layer standard LoRA and upstream TRL optimizer movement | Small engineering run, unmatched evaluation/rollout protocol, no validation improvement |
+
+The completed residual-core runs all selected the initialization checkpoint;
+they are not evidence that normal GRPO fails on GSM8K. They are explicitly
+quarantined from the corrected efficacy comparison.
+
+## Locked evaluation protocol
+
+Prior experiments exposed 384 distinct official-test IDs. They are excluded.
+The remaining 935 IDs were deterministically partitioned before the corrected
+run into 256 development IDs and 679 locked final IDs. Training processes load
+only the committed development source indices. The locked partition will be
+evaluated once after methods, hyperparameters, steps, and seeds are frozen.
+
+## Matched ChipWhisperer power trace (complete)
+
+One BP-GRPO optimizer update and one backward-free FO-NPG update were captured
+from the same initial LoRA policy and the same 32-response fixed rollout. Each
+method ran in an isolated process. SideCapture recorded one healthy 20 s,
+100 kHz true-stream ChipWhisperer trace per method; the optimizer interval was
+marked inside that stream, and an auxiliary 100 Hz NVML channel supplied watts.
+
+| Metric | BP-GRPO | FO-NPG | FO / BP |
+|---|---:|---:|---:|
+| Backward calls | 4 | 0 | — |
+| Optimizer time | 1.033 s | 5.226 s | 5.06x |
+| Logical policy evaluations | 2 | 19 | 9.50x |
+| Mean NVML power | 187.6 W | 317.2 W | 1.69x |
+| Peak NVML power | 305.4 W | 352.1 W | 1.15x |
+| Raw NVML energy | 193.7 J | 1,657.6 J | 8.56x |
+
+The result answers the narrow speed question negatively for this q=8
+implementation: eliminating reverse mode does not compensate for sixteen
+two-sided probe scores plus line-search rescoring. The forward-only step is
+longer and substantially more energy-intensive even though it executes no
+backward call. Its external ChipWhisperer AC RMS is lower (0.01067 versus
+0.01549), showing why that AC-coupled, uncalibrated amplitude proxy must not be
+mistaken for total watts or integrated as energy; NVML supplies the energy
+comparison.
+
+This is descriptive n=1 evidence with no repeat-based uncertainty interval.
+The matched digests, raw channels, health receipts, figure, and CSV are in
+`artifacts/matched_lora_power_trace/`.
+
+## Pending result table
+
+The final report will include, for the base model, BP-GRPO, and FO-NPG:
+
+- selected-checkpoint development and locked-test exact accuracy;
+- paired multi-seed uncertainty;
+- rollout reward and zero-advantage trajectories;
+- environment samples and generated/scored tokens;
+- policy-sync, rollout/rescore, optimizer, evaluation, and total wall time;
+- peak allocated/reserved GPU memory;
+- empirical KL, accepted-step rate, and estimator fidelity;
+- explicit BP backward-call and FO zero-backward-call receipts.
+
+Matplotlib PNG/PDF figures and `summary.csv` will be generated from the raw
+append-only JSONL after artifact validation passes. No placeholder number in
+this report should be interpreted as a completed result.

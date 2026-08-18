@@ -1,0 +1,25 @@
+{
+  "checks": {
+    "accepted_nonzero_fo_step_observed": null,
+    "bp_dev_gain_met": true,
+    "bp_train_gain_met": true,
+    "finite_nonzero_bp_gradient_observed": true,
+    "informative_group_observed": true,
+    "nonzero_policy_step_observed": true,
+    "policy_digest_changed": true
+  },
+  "dev_accuracy_gain": 0.02734375,
+  "final_dev_accuracy": 0.68359375,
+  "final_train_accuracy": 0.875,
+  "initial_dev_accuracy": 0.65625,
+  "initial_lora_digest": "fc61cc8ca79ddb4d1964b2fa12710e983fb76ced22cf848b4ba57f6a1d011089",
+  "initial_train_accuracy": 0.875,
+  "live_final_lora_digest": "c0ac5f49ac31453632558bd92cd6e4160ec482826c5bb43db011a0b154790eda",
+  "method": "bp_grpo",
+  "minimum_bp_dev_accuracy_gain": 0.02,
+  "minimum_bp_train_accuracy_gain": 0.0,
+  "passed": true,
+  "schema": "rl-no-backward-matched-learning-gate-v1",
+  "seed": 0,
+  "train_accuracy_gain": 0.0
+}

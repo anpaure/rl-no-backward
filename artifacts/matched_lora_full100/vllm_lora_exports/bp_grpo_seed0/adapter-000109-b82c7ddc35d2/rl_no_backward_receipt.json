@@ -1,0 +1,15 @@
+{
+  "adapter_model_sha256": "9aec56eecc265b9ed0aa9f5938e08ac3ce9d9a905551015fb283d644c3492a04",
+  "adapter_name": "default",
+  "durable_hash_fields": [
+    "state_digest",
+    "adapter_model_sha256"
+  ],
+  "parameter_count": 1089536,
+  "path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/bp_grpo_seed0/adapter-000109-b82c7ddc35d2",
+  "path_is_transient": true,
+  "schema_version": 1,
+  "state_digest": "b82c7ddc35d208956a216d67138344f2880e86eaed500719824c5ee8e0880881",
+  "version": 109,
+  "vllm_reload_semantics": "LoRARequest(load_inplace=True)"
+}

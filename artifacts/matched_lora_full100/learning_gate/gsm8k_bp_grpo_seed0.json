@@ -1,0 +1,34 @@
+{
+  "best_dev_accuracy": 0.70703125,
+  "best_dev_accuracy_gain": 0.05078125,
+  "dev_accuracy_gain": 0.03515625,
+  "failed_hard_structural_checks": [],
+  "failed_stochastic_efficacy_checks": [],
+  "final_dev_accuracy": 0.69140625,
+  "final_train_accuracy": 0.875,
+  "hard_structural_checks": {
+    "accepted_nonzero_fo_step_observed": null,
+    "finite_nonzero_bp_gradient_observed": true,
+    "nonzero_policy_step_observed": true,
+    "policy_digest_changed": true
+  },
+  "hard_structural_checks_passed": true,
+  "initial_dev_accuracy": 0.65625,
+  "initial_lora_digest": "fc61cc8ca79ddb4d1964b2fa12710e983fb76ced22cf848b4ba57f6a1d011089",
+  "initial_train_accuracy": 0.875,
+  "live_final_lora_digest": "b82c7ddc35d208956a216d67138344f2880e86eaed500719824c5ee8e0880881",
+  "method": "bp_grpo",
+  "minimum_bp_dev_accuracy_gain": 0.01,
+  "minimum_bp_train_accuracy_gain": null,
+  "passed": true,
+  "schema": "rl-no-backward-matched-learning-gate-v2",
+  "seed": 0,
+  "stochastic_efficacy_checks": {
+    "bp_best_dev_gain_met": true,
+    "bp_train_gain_met": null,
+    "informative_group_observed": true
+  },
+  "stochastic_efficacy_checks_enforced": true,
+  "stochastic_efficacy_observed_passed": true,
+  "train_accuracy_gain": 0.0
+}

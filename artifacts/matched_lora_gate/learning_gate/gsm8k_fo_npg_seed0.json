@@ -1,0 +1,25 @@
+{
+  "checks": {
+    "accepted_nonzero_fo_step_observed": true,
+    "bp_dev_gain_met": null,
+    "bp_train_gain_met": null,
+    "finite_nonzero_bp_gradient_observed": null,
+    "informative_group_observed": true,
+    "nonzero_policy_step_observed": true,
+    "policy_digest_changed": true
+  },
+  "dev_accuracy_gain": 0.02734375,
+  "final_dev_accuracy": 0.68359375,
+  "final_train_accuracy": 0.875,
+  "initial_dev_accuracy": 0.65625,
+  "initial_lora_digest": "fc61cc8ca79ddb4d1964b2fa12710e983fb76ced22cf848b4ba57f6a1d011089",
+  "initial_train_accuracy": 0.875,
+  "live_final_lora_digest": "230f99189665e519d93229cbc823a606fba436263de066dacc5a3bc2ea19c593",
+  "method": "fo_npg",
+  "minimum_bp_dev_accuracy_gain": 0.02,
+  "minimum_bp_train_accuracy_gain": 0.0,
+  "passed": true,
+  "schema": "rl-no-backward-matched-learning-gate-v1",
+  "seed": 0,
+  "train_accuracy_gain": 0.0
+}

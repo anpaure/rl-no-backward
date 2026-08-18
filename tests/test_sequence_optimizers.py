@@ -134,6 +134,8 @@ def test_backprop_sequence_grpo_updates_only_adapters_and_tracks_token_work() ->
     assert result.backward_calls == 2
     assert result.policy_evaluations == 3
     assert result.forward_calls == 6
+    assert result.full_prefix_calls == result.forward_calls
+    assert result.suffix_calls == result.forward_calls
     assert model.forward_call_count == result.forward_calls
     assert result.teacher_forced_examples == 12
     assert result.scored_tokens == 30
@@ -143,6 +145,51 @@ def test_backprop_sequence_grpo_updates_only_adapters_and_tracks_token_work() ->
     assert result.empirical_kl >= 0
     assert result.surrogate_improvement > 0
     assert torch.equal(rollout.old_token_log_probs, rollout.old_token_log_probs.detach())
+
+
+def test_streaming_backprop_matches_full_graph_update_and_counts_chunk_backwards() -> None:
+    reference_bundle, reference_model, reference_rollout = make_bundle_and_rollout()
+    streaming_bundle, streaming_model, streaming_rollout = make_bundle_and_rollout()
+    reference_config = BackpropSequenceConfig(
+        learning_rate=0.03,
+        epochs_per_rollout=2,
+        max_grad_norm=2.0,
+        scoring_micro_batch_size=2,
+    )
+    streaming_config = replace(reference_config, use_streaming_backward=True)
+
+    reference_result = sequence_grpo_step(
+        reference_bundle,
+        reference_rollout,
+        make_sequence_grpo_optimizer(reference_bundle, reference_config),
+        reference_config,
+    )
+    streaming_result = sequence_grpo_step(
+        streaming_bundle,
+        streaming_rollout,
+        make_sequence_grpo_optimizer(streaming_bundle, streaming_config),
+        streaming_config,
+    )
+
+    torch.testing.assert_close(
+        parameter_vector(streaming_bundle),
+        parameter_vector(reference_bundle),
+        atol=2e-6,
+        rtol=2e-5,
+    )
+    assert reference_result.forward_calls == streaming_result.forward_calls == 6
+    assert streaming_result.full_prefix_calls == streaming_result.forward_calls
+    assert streaming_result.suffix_calls == streaming_result.forward_calls
+    assert reference_model.forward_call_count == reference_result.forward_calls
+    assert streaming_model.forward_call_count == streaming_result.forward_calls
+    assert reference_result.backward_calls == 2
+    assert streaming_result.backward_calls == 4
+    assert streaming_result.policy_evaluations == reference_result.policy_evaluations == 3
+    assert streaming_result.teacher_forced_examples == reference_result.teacher_forced_examples
+    assert streaming_result.scored_tokens == reference_result.scored_tokens
+    assert streaming_result.empirical_kl == pytest.approx(
+        reference_result.empirical_kl, abs=2e-6
+    )
 
 
 @pytest.mark.parametrize("method", ["fo_pg", "fo_npg", "focus_npg"])
@@ -172,6 +219,8 @@ def test_forward_sequence_methods_accept_trust_region_steps_without_backward(met
     assert result.backward_calls == 0
     assert result.policy_evaluations == 2 * config.directions + result.line_search_trials
     assert result.forward_calls == 2 * result.policy_evaluations
+    assert result.full_prefix_calls == result.forward_calls
+    assert result.suffix_calls == result.forward_calls
     assert model.forward_call_count == result.forward_calls
     assert result.teacher_forced_examples == 4 * result.policy_evaluations
     assert result.scored_tokens == 10 * result.policy_evaluations
@@ -274,6 +323,7 @@ def test_forward_only_module_has_no_reverse_mode_calls_and_scores_under_inferenc
     for name in (
         "sampled_sequence_kl",
         "directional_sequence_score_statistics",
+        "_directional_sequence_score_statistics_with_counts",
         "_solve_projected_coordinates",
         "_initial_step_scale",
         "_sequence_line_search",

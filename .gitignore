@@ -1,5 +1,6 @@
 .DS_Store
-.venv/
+.venv
+.venv-*
 __pycache__/
 *.py[cod]
 *.egg-info/
@@ -7,4 +8,8 @@ __pycache__/
 .ruff_cache/
 .mypy_cache/
 artifacts/tmp/
-
+artifacts/reference_eager_active/
+artifacts/shared_initializations/
+# W&B points these at a host-global cache path; the run binary and per-run
+# debug/internal logs are retained, but broken machine-specific symlinks are not.
+artifacts/**/logs/debug-core.log

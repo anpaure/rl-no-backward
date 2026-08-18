@@ -1,0 +1,185 @@
+{
+  "adapter_fingerprint": "007feb7ed77e372ce35201620bb3aca2813c6d37884ebec374c55b88573669d8",
+  "calibration_wall_time_seconds": 0.49768214393407106,
+  "config": {
+    "adapter_core_std": 0.0,
+    "adapter_layers": 4,
+    "adapter_rank": 8,
+    "adapter_scale": 1.0,
+    "backends": [
+      "eager",
+      "sdpa",
+      "flash_attention_2"
+    ],
+    "benchmark_iterations": 2,
+    "calibration_prompt_count": 8,
+    "device": "cuda",
+    "do_sample": true,
+    "dtype": "bfloat16",
+    "group_size": 8,
+    "logprob_atol": 0.005,
+    "logprob_rtol": 0.001,
+    "max_new_tokens": 512,
+    "max_prompt_tokens": 256,
+    "model_name": "Qwen/Qwen2.5-1.5B-Instruct",
+    "model_revision": "989aa7980e4cf806f80c7fef2b1adb7bc71aa306",
+    "prompt_count": 2,
+    "scoring_micro_batch_size": 4,
+    "seed": 0,
+    "temperature": 0.8,
+    "warmup_iterations": 1
+  },
+  "created_at_utc": "2026-08-18T15:25:33.218423+00:00",
+  "results": [
+    {
+      "backend": "eager",
+      "completion_samples": [
+        "To find the total number of notebooks sold, you simply need to add the two quantities together:\n\n\\[ \\text{Total} = \\text{Monday's sales + Tuesday's sales} \\]\n\\[ \\text{Total} = 18 + 27 \\]\n\nAdding these numbers gives us:\n\n\\[ \\text{Total} = 45 \\]\n\nSo, there were \\( 45 \\) notebooks sold in total.",
+        "To find the total number of notebooks sold, you need to add the number of notebooks sold each day:\n\nMonday: 18 notebooks\nTuesday: 27 notebooks\n\nTotal = Monday's sales + Tuesday's sales  \nTotal = 18 + 27  \nTotal = 45  \n\nTherefore, the total number of notebooks sold is 45."
+      ],
+      "error_message": null,
+      "error_type": null,
+      "generation": {
+        "iterations": 2,
+        "mean_iteration_seconds": 3.1455661859363317,
+        "peak_memory_bytes": 3291338752,
+        "peak_memory_increment_bytes": 167993344,
+        "processed_tokens": 3274,
+        "token_unit": "generated_response_tokens_including_eos",
+        "tokens_per_second": 520.4150551080262,
+        "wall_time_seconds": 6.2911323718726635
+      },
+      "load_wall_time_seconds": 0.9219983811490238,
+      "logprob_equivalence": {
+        "allclose": true,
+        "compared_tokens": 1637,
+        "max_absolute_difference": 0.0,
+        "mean_absolute_difference": 0.0
+      },
+      "output_digest": "15d61bc87dbe6e89b29e3be7cc8b612c6897a4e542a41865e420030265f26d07",
+      "output_equivalence": {
+        "exact_match": true,
+        "mask_match": true,
+        "matching_sequence_fraction": 1.0,
+        "mismatched_token_count": 0
+      },
+      "resolved_backend": "eager",
+      "status": "available",
+      "teacher_forced_scoring": {
+        "iterations": 2,
+        "mean_iteration_seconds": 0.07861583901103586,
+        "peak_memory_bytes": 4782605824,
+        "peak_memory_increment_bytes": 1659216384,
+        "processed_tokens": 3274,
+        "token_unit": "teacher_forced_response_tokens_including_eos",
+        "tokens_per_second": 20822.775926492406,
+        "wall_time_seconds": 0.15723167802207172
+      }
+    },
+    {
+      "backend": "sdpa",
+      "completion_samples": [
+        "To find the total number of notebooks sold, you simply need to add the numbers together:\n\n18 notebooks (sold on Monday) + 27 notebooks (sold on Tuesday) = 45 notebooks\n\nTherefore, 45 in total were sold.",
+        "To find the total number of notebooks sold, you need to add the number of notebooks sold each day:\n\nMonday: 18 notebooks\nTuesday: 27 notebooks\n\nTotal = Monday's sales + Tuesday's sales  \nTotal = 18 + 27  \nTotal = 45\n\nTherefore, the total number of notebooks sold is 45."
+      ],
+      "error_message": null,
+      "error_type": null,
+      "generation": {
+        "iterations": 2,
+        "mean_iteration_seconds": 6.918048951076344,
+        "peak_memory_bytes": 3412909568,
+        "peak_memory_increment_bytes": 289564160,
+        "processed_tokens": 3390,
+        "token_unit": "generated_response_tokens_including_eos",
+        "tokens_per_second": 245.0112758650376,
+        "wall_time_seconds": 13.836097902152687
+      },
+      "load_wall_time_seconds": 0.4876019691582769,
+      "logprob_equivalence": {
+        "allclose": false,
+        "compared_tokens": 1637,
+        "max_absolute_difference": 18.568073272705078,
+        "mean_absolute_difference": 0.09207986295223236
+      },
+      "output_digest": "438914eb92eddac48c45cb0f5908a20059d6781346f97d5b3ffd52e4561f7f70",
+      "output_equivalence": {
+        "exact_match": false,
+        "mask_match": false,
+        "matching_sequence_fraction": 0.0,
+        "mismatched_token_count": -1
+      },
+      "resolved_backend": "sdpa",
+      "status": "available",
+      "teacher_forced_scoring": {
+        "iterations": 2,
+        "mean_iteration_seconds": 0.07318730687256902,
+        "peak_memory_bytes": 4782605824,
+        "peak_memory_increment_bytes": 1659216384,
+        "processed_tokens": 3274,
+        "token_unit": "teacher_forced_response_tokens_including_eos",
+        "tokens_per_second": 22367.266537765663,
+        "wall_time_seconds": 0.14637461374513805
+      }
+    },
+    {
+      "backend": "flash_attention_2",
+      "completion_samples": [
+        "To find the total number of notebooks sold, you simply need to add the numbers together:\n\n18 notebooks (sold on Monday) + 27 notebooks (sold on Tuesday) = 45 notebooks\n\nTherefore, 45 in total were sold.",
+        "To find the total number of notebooks sold, you need to add the number of notebooks sold each day:\n\nMonday: 18 notebooks\nTuesday: 27 notebooks\n\nTotal = Monday's sales + Tuesday's sales  \nTotal = 18 + 27  \nTotal = 45\n\nIn total, the shop sold 45 notebooks over the two days."
+      ],
+      "error_message": null,
+      "error_type": null,
+      "generation": {
+        "iterations": 2,
+        "mean_iteration_seconds": 8.68299932940863,
+        "peak_memory_bytes": 3362810368,
+        "peak_memory_increment_bytes": 239464960,
+        "processed_tokens": 3376,
+        "token_unit": "generated_response_tokens_including_eos",
+        "tokens_per_second": 194.4028711695137,
+        "wall_time_seconds": 17.36599865881726
+      },
+      "load_wall_time_seconds": 0.5141582479700446,
+      "logprob_equivalence": {
+        "allclose": false,
+        "compared_tokens": 1637,
+        "max_absolute_difference": 18.500465393066406,
+        "mean_absolute_difference": 0.09254967421293259
+      },
+      "output_digest": "ec1ad3ea25ca4a435b3080965cea6a7ff986a3fd995a99830e3238a74d454be9",
+      "output_equivalence": {
+        "exact_match": false,
+        "mask_match": false,
+        "matching_sequence_fraction": 0.0,
+        "mismatched_token_count": -1
+      },
+      "resolved_backend": "flash_attention_2",
+      "status": "available",
+      "teacher_forced_scoring": {
+        "iterations": 2,
+        "mean_iteration_seconds": 0.10026167845353484,
+        "peak_memory_bytes": 4782605824,
+        "peak_memory_increment_bytes": 1659216384,
+        "processed_tokens": 3274,
+        "token_unit": "teacher_forced_response_tokens_including_eos",
+        "tokens_per_second": 16327.275039173112,
+        "wall_time_seconds": 0.20052335690706968
+      }
+    }
+  ],
+  "system": {
+    "cuda_available": true,
+    "cuda_runtime": "13.0",
+    "device": "cuda",
+    "device_capability": [
+      9,
+      0
+    ],
+    "device_name": "NVIDIA H100 PCIe",
+    "device_total_memory_bytes": 85019328512,
+    "platform": "Linux-6.8.0-136-generic-x86_64-with-glibc2.39",
+    "python": "3.12.3",
+    "torch": "2.11.0+cu130",
+    "transformers": "5.15.0"
+  }
+}

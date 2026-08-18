@@ -19,11 +19,15 @@ from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from numbers import Real
+from typing import TYPE_CHECKING
 
 import torch
 from torch import Tensor
 
 from .model import ModelBundle
+
+if TYPE_CHECKING:
+    from .frozen_prefix import FrozenPrefixCache
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,6 +87,8 @@ class SequenceRolloutBatch:
     sampling_temperature: float
     pad_token_id: int
     eos_token_ids: tuple[int, ...]
+    frozen_prefix_cache: FrozenPrefixCache | None = None
+    frozen_prefix_fallback_reason: str | None = None
 
     def __post_init__(self) -> None:
         if self.prompt_input_ids.ndim != 2:
@@ -137,6 +143,18 @@ class SequenceRolloutBatch:
             raise ValueError("rewards and advantages must be finite")
         if self.sampling_temperature <= 0 or not math.isfinite(self.sampling_temperature):
             raise ValueError("sampling_temperature must be positive and finite")
+        if self.frozen_prefix_fallback_reason is not None and (
+            not isinstance(self.frozen_prefix_fallback_reason, str)
+            or not self.frozen_prefix_fallback_reason.strip()
+        ):
+            raise ValueError("frozen_prefix_fallback_reason must be a non-empty string or None")
+        if self.frozen_prefix_cache is not None:
+            if self.frozen_prefix_fallback_reason is not None:
+                raise ValueError("an active frozen-prefix cache cannot also have a fallback reason")
+            if self.frozen_prefix_cache.batch_size != batch_size * group_size:
+                raise ValueError("frozen-prefix cache batch size does not match the rollout")
+            if self.frozen_prefix_cache.hidden_states.device not in devices:
+                raise ValueError("frozen-prefix cache and rollout must be on the same device")
 
     @property
     def batch_size(self) -> int:
@@ -207,6 +225,12 @@ class SequenceRolloutBatch:
             old_token_log_probs=self.old_token_log_probs.to(device),
             rewards=self.rewards.to(device),
             advantages=self.advantages.to(device),
+            frozen_prefix_cache=None,
+            frozen_prefix_fallback_reason=(
+                "frozen-prefix cache invalidated by rollout device transfer"
+                if self.frozen_prefix_cache is not None
+                else self.frozen_prefix_fallback_reason
+            ),
         )
 
 
@@ -305,18 +329,37 @@ def _teacher_forced_flat_token_log_probs(
         raise ValueError("micro_batch_size must be a positive integer")
 
     chunks: list[Tensor] = []
+    from .frozen_prefix import qwen_teacher_forcing_logits_to_keep
+
+    logits_to_keep = qwen_teacher_forcing_logits_to_keep(
+        bundle,
+        prompt_width,
+        response_width,
+    )
     for start in range(0, total_examples, micro_batch_size):
         end = min(start + micro_batch_size, total_examples)
+        model_kwargs: dict[str, object] = {
+            "input_ids": input_ids[start:end],
+            "attention_mask": attention_mask[start:end],
+            "use_cache": False,
+        }
+        if logits_to_keep is not None:
+            model_kwargs["logits_to_keep"] = logits_to_keep
         outputs = bundle.model(
-            input_ids=input_ids[start:end],
-            attention_mask=attention_mask[start:end],
-            use_cache=False,
+            **model_kwargs,
         )
         logits = outputs.logits if hasattr(outputs, "logits") else outputs[0]
-        if logits.ndim != 3 or logits.shape[1] < prompt_width + response_width:
+        expected_logit_width = (
+            response_width if logits_to_keep is not None else prompt_width + response_width
+        )
+        if logits.ndim != 3 or logits.shape[1] < expected_logit_width:
             raise ValueError("causal LM returned logits with an incompatible shape")
         # Token at full-sequence position P + t is predicted by logits at P + t - 1.
-        response_logits = logits[:, prompt_width - 1 : prompt_width + response_width - 1, :].float()
+        response_logits = (
+            logits
+            if logits_to_keep is not None
+            else logits[:, prompt_width - 1 : prompt_width + response_width - 1, :]
+        ).float()
         scaled_logits = response_logits / temperature
         targets = response_input_ids[start:end, :, None]
         selected_logits = scaled_logits.gather(-1, targets).squeeze(-1)
@@ -340,17 +383,50 @@ def teacher_forced_token_log_probs(
     """
 
     target_temperature = rollout.sampling_temperature if temperature is None else float(temperature)
-    flat = _teacher_forced_flat_token_log_probs(
-        bundle=bundle,
-        input_ids=rollout.flat_input_ids,
-        attention_mask=rollout.flat_attention_mask,
-        response_input_ids=rollout.flat_response_input_ids,
-        response_mask=rollout.flat_response_mask,
-        prompt_width=rollout.prompt_input_ids.shape[1],
-        temperature=target_temperature,
-        micro_batch_size=micro_batch_size,
-    )
+    if rollout.frozen_prefix_cache is None:
+        flat = _teacher_forced_flat_token_log_probs(
+            bundle=bundle,
+            input_ids=rollout.flat_input_ids,
+            attention_mask=rollout.flat_attention_mask,
+            response_input_ids=rollout.flat_response_input_ids,
+            response_mask=rollout.flat_response_mask,
+            prompt_width=rollout.prompt_input_ids.shape[1],
+            temperature=target_temperature,
+            micro_batch_size=micro_batch_size,
+        )
+    else:
+        from .frozen_prefix import cached_prefix_flat_token_log_probs
+
+        flat = cached_prefix_flat_token_log_probs(
+            bundle,
+            rollout.frozen_prefix_cache,
+            rollout.flat_response_input_ids,
+            rollout.flat_response_mask,
+            prompt_width=rollout.prompt_input_ids.shape[1],
+            temperature=target_temperature,
+            micro_batch_size=micro_batch_size,
+        )
     return flat.reshape_as(rollout.response_input_ids)
+
+
+def attach_frozen_prefix_cache(
+    bundle: ModelBundle,
+    rollout: SequenceRolloutBatch,
+) -> SequenceRolloutBatch:
+    """Return ``rollout`` with an exact Qwen prefix cache when supported."""
+
+    from .frozen_prefix import maybe_build_frozen_prefix_cache
+
+    result = maybe_build_frozen_prefix_cache(
+        bundle,
+        rollout.flat_input_ids,
+        rollout.flat_attention_mask,
+    )
+    return replace(
+        rollout,
+        frozen_prefix_cache=result.cache,
+        frozen_prefix_fallback_reason=result.fallback_reason,
+    )
 
 
 def central_difference_score_statistics(
@@ -360,6 +436,7 @@ def central_difference_score_statistics(
     radius: float,
     *,
     length_normalize: bool = False,
+    sampling_weights: Tensor | None = None,
 ) -> ProjectedScoreStatistics:
     """Build projected policy-gradient/Fisher statistics from paired probes.
 
@@ -379,7 +456,21 @@ def central_difference_score_statistics(
     token_scores = (
         (positive_token_log_probs - negative_token_log_probs) / (2.0 * radius)
     ).masked_fill(~mask, 0.0)
-    sequence_scores = token_scores.sum(dim=2)
+    if sampling_weights is None:
+        token_weights = torch.ones_like(rollout.response_mask, dtype=token_scores.dtype)
+    else:
+        if sampling_weights.shape == rollout.response_mask.shape[:-1] + (1,):
+            token_weights = sampling_weights.expand_as(rollout.response_mask)
+        elif sampling_weights.shape == rollout.response_mask.shape:
+            token_weights = sampling_weights
+        else:
+            raise ValueError("sampling_weights must be per-completion or per-token")
+        token_weights = token_weights.to(token_scores.dtype)
+        if not torch.isfinite(token_weights).all() or (token_weights < 0).any():
+            raise ValueError("sampling_weights must be finite and non-negative")
+    token_weights = token_weights.masked_fill(~rollout.response_mask, 0.0)
+    weighted_token_scores = token_scores * token_weights.unsqueeze(-1)
+    sequence_scores = weighted_token_scores.sum(dim=2)
     lengths = rollout.response_lengths.clamp_min(1).to(sequence_scores.dtype)
     if length_normalize:
         sequence_scores = sequence_scores / lengths.unsqueeze(-1)
@@ -389,7 +480,12 @@ def central_difference_score_statistics(
     # outer products—not an outer product of the summed completion score,
     # which would introduce spurious cross-token terms.
     per_completion_fisher = (
-        torch.einsum("bgtd,bgte->bgde", token_scores, token_scores) / lengths[..., None, None]
+        torch.einsum(
+            "bgtd,bgte->bgde",
+            token_scores * token_weights.sqrt().unsqueeze(-1),
+            token_scores * token_weights.sqrt().unsqueeze(-1),
+        )
+        / lengths[..., None, None]
     )
     fisher = per_completion_fisher.mean(dim=(0, 1))
     return ProjectedScoreStatistics(
@@ -496,6 +592,7 @@ def generate_sequence_rollouts(
     max_prompt_tokens: int | None = 512,
     seed: int | None = None,
     scoring_micro_batch_size: int | None = None,
+    use_frozen_prefix_scoring: bool = False,
 ) -> SequenceRolloutBatch:
     """Sample ``group_size`` on-policy completions per prompt and score them.
 
@@ -526,6 +623,8 @@ def generate_sequence_rollouts(
         or max_prompt_tokens < 1
     ):
         raise ValueError("max_prompt_tokens must be a positive integer or None")
+    if not isinstance(use_frozen_prefix_scoring, bool):
+        raise TypeError("use_frozen_prefix_scoring must be boolean")
 
     eos_token_ids = _resolve_eos_token_ids(bundle)
     pad_token_id = _resolve_pad_token_id(bundle, eos_token_ids)
@@ -598,17 +697,43 @@ def generate_sequence_rollouts(
         ],
         dim=1,
     )
+    frozen_prefix_cache = None
+    frozen_prefix_fallback_reason = None
     with torch.no_grad():
-        old_flat = _teacher_forced_flat_token_log_probs(
-            bundle=bundle,
-            input_ids=flat_input_ids,
-            attention_mask=flat_attention_mask,
-            response_input_ids=response_input_ids.reshape(expected_examples, -1),
-            response_mask=response_mask.reshape(expected_examples, -1),
-            prompt_width=prompt_width,
-            temperature=temperature,
-            micro_batch_size=scoring_micro_batch_size,
-        )
+        if use_frozen_prefix_scoring:
+            from .frozen_prefix import (
+                cached_prefix_flat_token_log_probs,
+                maybe_build_frozen_prefix_cache,
+            )
+
+            cache_result = maybe_build_frozen_prefix_cache(
+                bundle,
+                flat_input_ids,
+                flat_attention_mask,
+            )
+            frozen_prefix_cache = cache_result.cache
+            frozen_prefix_fallback_reason = cache_result.fallback_reason
+        if frozen_prefix_cache is None:
+            old_flat = _teacher_forced_flat_token_log_probs(
+                bundle=bundle,
+                input_ids=flat_input_ids,
+                attention_mask=flat_attention_mask,
+                response_input_ids=response_input_ids.reshape(expected_examples, -1),
+                response_mask=response_mask.reshape(expected_examples, -1),
+                prompt_width=prompt_width,
+                temperature=temperature,
+                micro_batch_size=scoring_micro_batch_size,
+            )
+        else:
+            old_flat = cached_prefix_flat_token_log_probs(
+                bundle,
+                frozen_prefix_cache,
+                response_input_ids.reshape(expected_examples, -1),
+                response_mask.reshape(expected_examples, -1),
+                prompt_width=prompt_width,
+                temperature=temperature,
+                micro_batch_size=scoring_micro_batch_size,
+            )
     old_token_log_probs = old_flat.reshape_as(response_input_ids).detach()
 
     completion_groups: list[tuple[str, ...]] = []
@@ -654,6 +779,8 @@ def generate_sequence_rollouts(
         sampling_temperature=temperature,
         pad_token_id=pad_token_id,
         eos_token_ids=eos_token_ids,
+        frozen_prefix_cache=frozen_prefix_cache,
+        frozen_prefix_fallback_reason=frozen_prefix_fallback_reason,
     )
 
 
@@ -662,6 +789,7 @@ __all__ = [
     "ProjectedScoreStatistics",
     "RewardCallback",
     "SequenceRolloutBatch",
+    "attach_frozen_prefix_cache",
     "central_difference_score_statistics",
     "clipped_grpo_surrogate",
     "completion_log_probs",

@@ -9,6 +9,7 @@ import torch
 from torch import Tensor
 
 from .model import ModelBundle, parameter_vector, set_adapter_grad_enabled
+from .sequence_backprop_fastpath import streaming_grpo_backward
 from .sequence_policy import (
     SequenceRolloutBatch,
     clipped_grpo_surrogate,
@@ -26,6 +27,7 @@ class BackpropSequenceConfig:
     epochs_per_rollout: int = 2
     max_grad_norm: float = 1.0
     scoring_micro_batch_size: int | None = None
+    use_streaming_backward: bool = False
 
     def __post_init__(self) -> None:
         for name, value, allow_zero in (
@@ -52,6 +54,8 @@ class BackpropSequenceConfig:
             or self.scoring_micro_batch_size < 1
         ):
             raise ValueError("scoring_micro_batch_size must be a positive integer or None")
+        if not isinstance(self.use_streaming_backward, bool):
+            raise TypeError("use_streaming_backward must be boolean")
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,6 +76,8 @@ class BackpropSequenceStepResult:
     teacher_forced_examples: int
     scored_tokens: int
     derivative_variance: float
+    full_prefix_calls: int = 0
+    suffix_calls: int = 0
 
 
 def _micro_batches_per_evaluation(
@@ -124,15 +130,46 @@ def sequence_grpo_step(
         )
 
     gradient_norm = 0.0
+    training_forward_calls = 0
+    backward_calls = 0
+    training_full_prefix_calls = 0
+    training_suffix_calls = 0
     for _ in range(config.epochs_per_rollout):
         optimizer.zero_grad(set_to_none=True)
-        token_log_probs = teacher_forced_token_log_probs(
-            bundle,
-            rollout,
-            micro_batch_size=config.scoring_micro_batch_size,
-        )
-        surrogate = clipped_grpo_surrogate(token_log_probs, rollout, config.clip_epsilon)
-        (-surrogate).backward()
+        if config.use_streaming_backward:
+            streaming_result = streaming_grpo_backward(
+                bundle,
+                rollout,
+                clip_epsilon=config.clip_epsilon,
+                micro_batch_size=(
+                    config.scoring_micro_batch_size or rollout.environment_samples
+                ),
+            )
+            training_forward_calls += streaming_result.model_calls
+            training_full_prefix_calls += streaming_result.full_prefix_calls
+            training_suffix_calls += streaming_result.suffix_calls
+            # The streaming implementation releases each chunk's graph with a
+            # separate backward invocation.
+            backward_calls += streaming_result.model_calls
+        else:
+            token_log_probs = teacher_forced_token_log_probs(
+                bundle,
+                rollout,
+                micro_batch_size=config.scoring_micro_batch_size,
+            )
+            surrogate = clipped_grpo_surrogate(token_log_probs, rollout, config.clip_epsilon)
+            (-surrogate).backward()
+            training_forward_calls += _micro_batches_per_evaluation(
+                rollout, config.scoring_micro_batch_size
+            )
+            if rollout.frozen_prefix_cache is None:
+                training_full_prefix_calls += _micro_batches_per_evaluation(
+                    rollout, config.scoring_micro_batch_size
+                )
+            training_suffix_calls += _micro_batches_per_evaluation(
+                rollout, config.scoring_micro_batch_size
+            )
+            backward_calls += 1
         norm = torch.nn.utils.clip_grad_norm_(bundle.trainable_parameters, config.max_grad_norm)
         gradient_norm = float(norm.item())
         optimizer.step()
@@ -150,9 +187,15 @@ def sequence_grpo_step(
         after = parameter_vector(bundle).float()
 
     policy_evaluations = config.epochs_per_rollout + 1
-    forward_calls = policy_evaluations * _micro_batches_per_evaluation(
+    forward_calls = training_forward_calls + _micro_batches_per_evaluation(
         rollout, config.scoring_micro_batch_size
     )
+    final_calls = _micro_batches_per_evaluation(rollout, config.scoring_micro_batch_size)
+    full_prefix_calls = training_full_prefix_calls
+    suffix_calls = training_suffix_calls
+    if rollout.frozen_prefix_cache is None:
+        full_prefix_calls += final_calls
+    suffix_calls += final_calls
     return BackpropSequenceStepResult(
         accepted=True,
         reward_mean=float(rollout.rewards.mean().item()),
@@ -165,11 +208,13 @@ def sequence_grpo_step(
         line_search_trials=0,
         policy_evaluations=policy_evaluations,
         forward_calls=forward_calls,
-        backward_calls=config.epochs_per_rollout,
+        backward_calls=backward_calls,
         environment_samples=rollout.environment_samples,
         teacher_forced_examples=policy_evaluations * rollout.environment_samples,
         scored_tokens=policy_evaluations * rollout.valid_response_tokens,
         derivative_variance=float("nan"),
+        full_prefix_calls=full_prefix_calls,
+        suffix_calls=suffix_calls,
     )
 
 

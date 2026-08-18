@@ -1,0 +1,2008 @@
+{
+  "schema_version": 1,
+  "method": "fo_npg",
+  "seed": 0,
+  "resolved_model_snapshot": "/home/amodo/.cache/huggingface/hub/models--Qwen--Qwen2.5-1.5B-Instruct/snapshots/989aa7980e4cf806f80c7fef2b1adb7bc71aa306",
+  "shared_initialization_digest": "fc61cc8ca79ddb4d1964b2fa12710e983fb76ced22cf848b4ba57f6a1d011089",
+  "frozen_base_parameter_digest_before": "6ce080d42e572f097f6d52e7b802e3e5a124d4ddd9a8262e120a21ed915e7012",
+  "frozen_base_parameter_digest_after": "6ce080d42e572f097f6d52e7b802e3e5a124d4ddd9a8262e120a21ed915e7012",
+  "vllm_lora_reload_receipts": [
+    {
+      "version": 1,
+      "policy_version": "same-id-reload-gate/initial",
+      "state_digest": "fc61cc8ca79ddb4d1964b2fa12710e983fb76ced22cf848b4ba57f6a1d011089",
+      "adapter_model_sha256": "fa04840b7589b0e646d420c6591c1e8671a800019ca83e9f0cbc52867356a956",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000001-fc61cc8ca79d",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 2,
+      "policy_version": "same-id-reload-gate/changed",
+      "state_digest": "44e0a7f2071040f7b52b100d23fa622ded775e11672bdfc9404ba19a8ac92ca4",
+      "adapter_model_sha256": "6a74848a95e77133a7f1bba8dd6dfaeda1cef9b8175d64984f255134d2602da3",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000002-44e0a7f20710",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 3,
+      "policy_version": "same-id-reload-gate/restored",
+      "state_digest": "fc61cc8ca79ddb4d1964b2fa12710e983fb76ced22cf848b4ba57f6a1d011089",
+      "adapter_model_sha256": "fa04840b7589b0e646d420c6591c1e8671a800019ca83e9f0cbc52867356a956",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000003-fc61cc8ca79d",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 4,
+      "policy_version": "fo_npg/seed=0/initial-eval/step=0",
+      "state_digest": "fc61cc8ca79ddb4d1964b2fa12710e983fb76ced22cf848b4ba57f6a1d011089",
+      "adapter_model_sha256": "fa04840b7589b0e646d420c6591c1e8671a800019ca83e9f0cbc52867356a956",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000004-fc61cc8ca79d",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 5,
+      "policy_version": "fo_npg/seed=0/rollout/step=1",
+      "state_digest": "fc61cc8ca79ddb4d1964b2fa12710e983fb76ced22cf848b4ba57f6a1d011089",
+      "adapter_model_sha256": "fa04840b7589b0e646d420c6591c1e8671a800019ca83e9f0cbc52867356a956",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000005-fc61cc8ca79d",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 6,
+      "policy_version": "fo_npg/seed=0/rollout/step=2",
+      "state_digest": "44ee386ec0ed67e52b85262a96c4e0d3748ea498c1550f2d80d898b72c367d5a",
+      "adapter_model_sha256": "247066e57db45c1e82d06cc2bb941e0944cf032192a45088ea8388fbbb0aa6cd",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000006-44ee386ec0ed",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 7,
+      "policy_version": "fo_npg/seed=0/rollout/step=3",
+      "state_digest": "49f24a7a50cd675337e88da117dfa6b503607c9046d42b8db60477362075d11e",
+      "adapter_model_sha256": "81ca1bab020742102d1902932dc136423eb8834b4e4e00f29d279493a202b960",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000007-49f24a7a50cd",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 8,
+      "policy_version": "fo_npg/seed=0/rollout/step=4",
+      "state_digest": "e1a334c4b6fa385f506a8d8616914d0e6335d91a6493b85f67ae31bc556b78f4",
+      "adapter_model_sha256": "1c94fe90818ef4d9fea82e31c9c9ec9927e278d5c9b47da842d4afc26a43d524",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000008-e1a334c4b6fa",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 9,
+      "policy_version": "fo_npg/seed=0/rollout/step=5",
+      "state_digest": "edf3b4ff9117fae52a2b70036cf1382e0db325bee27c29c491e20d426ac2e921",
+      "adapter_model_sha256": "4ef72e99fd9f60cab7d5e491b67c700573b6486d6bf5826d2099153d491f9185",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000009-edf3b4ff9117",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 10,
+      "policy_version": "fo_npg/seed=0/rollout/step=6",
+      "state_digest": "8a98a34d032bd1dc0ca212a80377a0c3383598580af0c461568f14fc04100824",
+      "adapter_model_sha256": "efbf791269b534053a7ce3b7f5a61f88ea9190a5aa440125703baea534c3972a",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000010-8a98a34d032b",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 11,
+      "policy_version": "fo_npg/seed=0/rollout/step=7",
+      "state_digest": "ea230e431ef5ca236d4687fda585c4919db6f3429e4c43f1b5dd1e2eeba91214",
+      "adapter_model_sha256": "99e4d588ca4291677c947fd1cd89dc41c2c0ac1dc1f485da0ef49a004815bd81",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000011-ea230e431ef5",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 12,
+      "policy_version": "fo_npg/seed=0/rollout/step=8",
+      "state_digest": "ea230e431ef5ca236d4687fda585c4919db6f3429e4c43f1b5dd1e2eeba91214",
+      "adapter_model_sha256": "99e4d588ca4291677c947fd1cd89dc41c2c0ac1dc1f485da0ef49a004815bd81",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000012-ea230e431ef5",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 13,
+      "policy_version": "fo_npg/seed=0/rollout/step=9",
+      "state_digest": "58932fc91ec480cdee22380826759d7411a6c60b7a7ff571c70eae2ab1f2ec71",
+      "adapter_model_sha256": "a7de0dd27366817f5b211f572ab1e29923546941fc8fe38d455ce4777de15342",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000013-58932fc91ec4",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 14,
+      "policy_version": "fo_npg/seed=0/rollout/step=10",
+      "state_digest": "e088d2c955178df478217ba6e2431d89af78f7f7486209a7b1527e0ad8bf101a",
+      "adapter_model_sha256": "cba2fc0ac12added1b84abadf8c4b9709ff1038f251936756f87a9fcc0a6fcd2",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000014-e088d2c95517",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 15,
+      "policy_version": "fo_npg/seed=0/rollout/step=11",
+      "state_digest": "10452f02c38c6e3a947f4379ddb94e32e57097b95fcdcfd079cd160246c0738a",
+      "adapter_model_sha256": "5b0a69e02201441c8b6300b65f7f712c561ddae0edf46624e821b10783fd36b1",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000015-10452f02c38c",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 16,
+      "policy_version": "fo_npg/seed=0/rollout/step=12",
+      "state_digest": "856d2e4019b48da9b952609ad4ebf958226547baaf67f057c80b61530c0b401f",
+      "adapter_model_sha256": "9b102e75205ba02d32be58def05646a342c21886e1cd567c76798a24025cbfcf",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000016-856d2e4019b4",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 17,
+      "policy_version": "fo_npg/seed=0/rollout/step=13",
+      "state_digest": "e59775c67f4bf9da7ee6d84c37dd27a834cc6c67a5aa98e212eebb5b05cfafb3",
+      "adapter_model_sha256": "e8ec3170e635fdeca1da3347a820095090f9eb37dfdcbb68bf4ad62678a32b3f",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000017-e59775c67f4b",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 18,
+      "policy_version": "fo_npg/seed=0/rollout/step=14",
+      "state_digest": "510e84fb18eb405b9011ffe1b2ada0b5826ecf415906dbb04d6a44de5beeff47",
+      "adapter_model_sha256": "1281f9cd0fe9ce5184bd44b71b75d45187b37b4eb4bd7174b196d57201d9cb21",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000018-510e84fb18eb",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 19,
+      "policy_version": "fo_npg/seed=0/rollout/step=15",
+      "state_digest": "e2d6061636508db9bcbdcc47fedab108fd767f87805c3a83d306903ca4490f8d",
+      "adapter_model_sha256": "581e14ac2d047869ffd971036dca7d5b82b3219bd09e2a457c16ed4cbc4f8e40",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000019-e2d606163650",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 20,
+      "policy_version": "fo_npg/seed=0/rollout/step=16",
+      "state_digest": "e2d6061636508db9bcbdcc47fedab108fd767f87805c3a83d306903ca4490f8d",
+      "adapter_model_sha256": "581e14ac2d047869ffd971036dca7d5b82b3219bd09e2a457c16ed4cbc4f8e40",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000020-e2d606163650",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 21,
+      "policy_version": "fo_npg/seed=0/rollout/step=17",
+      "state_digest": "e2e4dbc3c2835ede0f374eb135fdda4e86f424c461a2093a3a511c06d671be06",
+      "adapter_model_sha256": "e133fcbb2373efcdba2e064032169a77a812fa7c4aeed3b015da74fd7daf5989",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000021-e2e4dbc3c283",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 22,
+      "policy_version": "fo_npg/seed=0/rollout/step=18",
+      "state_digest": "6f3cbe56c0e102d6979c34091770265ebc99d2d1feb8331d9a92752f044cec10",
+      "adapter_model_sha256": "420496fb733d451cbc5691dc0c57a399bf2eb8082aa2acffcaeed82be2bfb84b",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000022-6f3cbe56c0e1",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 23,
+      "policy_version": "fo_npg/seed=0/rollout/step=19",
+      "state_digest": "6f3cbe56c0e102d6979c34091770265ebc99d2d1feb8331d9a92752f044cec10",
+      "adapter_model_sha256": "420496fb733d451cbc5691dc0c57a399bf2eb8082aa2acffcaeed82be2bfb84b",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000023-6f3cbe56c0e1",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 24,
+      "policy_version": "fo_npg/seed=0/rollout/step=20",
+      "state_digest": "1aa4cb1ea4d6d1b7fa97c9a343bfc228f422764aeb66c24a9b146a6953ddcf17",
+      "adapter_model_sha256": "c606fd639f2fcbcb7f49d2e21c9ee269ccf57f5fb7746701118a43a1018bb8e2",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000024-1aa4cb1ea4d6",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 25,
+      "policy_version": "fo_npg/seed=0/validation/step=20",
+      "state_digest": "4e6e35eeb9703baeb9d79486b27b6cae422467135ce816cbc2f9941b3396b3b6",
+      "adapter_model_sha256": "accc8e1b1ae778a69f6ce14407fe6392020950e219625c615d9ee1286f4f156a",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000025-4e6e35eeb970",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 26,
+      "policy_version": "fo_npg/seed=0/rollout/step=21",
+      "state_digest": "4e6e35eeb9703baeb9d79486b27b6cae422467135ce816cbc2f9941b3396b3b6",
+      "adapter_model_sha256": "accc8e1b1ae778a69f6ce14407fe6392020950e219625c615d9ee1286f4f156a",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000026-4e6e35eeb970",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 27,
+      "policy_version": "fo_npg/seed=0/rollout/step=22",
+      "state_digest": "711fa87731c5ccfea1136b401b34ab0f77fdb25f9b725e8b76019492d65ebf19",
+      "adapter_model_sha256": "9a9e8b20237364d360596cde28c86fb5e6142a797a812fbbfccf2e58c08a0830",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000027-711fa87731c5",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 28,
+      "policy_version": "fo_npg/seed=0/rollout/step=23",
+      "state_digest": "be3cede01b5be70edc28da66bad1210ecc172c67dbbdfd9d99191331677224a7",
+      "adapter_model_sha256": "f53da4d203a3db5f8560cfd2d1af10f53fdcca047f9d97e59238a2f6a48ba156",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000028-be3cede01b5b",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 29,
+      "policy_version": "fo_npg/seed=0/rollout/step=24",
+      "state_digest": "928442bf8743f239c2c7536e07c5e24a16015cc2d64e7e182187042ed740c29c",
+      "adapter_model_sha256": "2995eaeaa969bcadb5465bfd31bb5e7b86ae61eb24df3555c7964fbdccf69ce2",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000029-928442bf8743",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 30,
+      "policy_version": "fo_npg/seed=0/rollout/step=25",
+      "state_digest": "abbaf520a7d81baeaaceee283606e2c58f887f467a944ad31626aa12143db87b",
+      "adapter_model_sha256": "659003782f547ff023ea812fb4e811de24e9cf72754179ee785ecf833e724f0d",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000030-abbaf520a7d8",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 31,
+      "policy_version": "fo_npg/seed=0/rollout/step=26",
+      "state_digest": "6611a59193d496e44d177ace4855fdeb9874f861cffabc302b129d6ad6613986",
+      "adapter_model_sha256": "e5b18da1db61f08272f5aa9e0f573c1b27cc401b737c91e86c17f37f641f57b5",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000031-6611a59193d4",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 32,
+      "policy_version": "fo_npg/seed=0/rollout/step=27",
+      "state_digest": "1fc201441a7c15a309a17b0bf8fe5adfffec21f5bb6c018a2ffcf8bc667fcad0",
+      "adapter_model_sha256": "503fb3fa1f8efdedccb979baa25fc03e4e192f8637ea8e3d0de3427662c7eb32",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000032-1fc201441a7c",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 33,
+      "policy_version": "fo_npg/seed=0/rollout/step=28",
+      "state_digest": "f8d98471c0dc1b174a96c5a52e860d7b81d0adbaba98c161510c012c548d09d3",
+      "adapter_model_sha256": "395ff96d844f31c6be9fac53fe4a6fe78c09f42033e66ee2b4a960a8e913c4c4",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000033-f8d98471c0dc",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 34,
+      "policy_version": "fo_npg/seed=0/rollout/step=29",
+      "state_digest": "f3f154ee7243cd6551ce7ed8e0c1bcf3f36f60938dde6ceb9fb304a6333c9683",
+      "adapter_model_sha256": "c2cb5a65c44b063c4cf85d841fcab66d9a3d75aa10fa555b447267f89712061b",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000034-f3f154ee7243",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 35,
+      "policy_version": "fo_npg/seed=0/rollout/step=30",
+      "state_digest": "68e3d2134d4b3a33646c7f014982e7fbf1a8a618fc406dd834a88eb28b1c00e7",
+      "adapter_model_sha256": "f62c735897234b1b08e5fbdb2584d68aa31d7a482957a3569298190e59d38906",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000035-68e3d2134d4b",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 36,
+      "policy_version": "fo_npg/seed=0/rollout/step=31",
+      "state_digest": "4c951c7ef1199472ad722f202cfcfdcad58d99529e5e7a96b5d86e7f64017afb",
+      "adapter_model_sha256": "022e98eefb2d854a27a3d00db9e44df4938a7b232027cf21efb719cedc2ebd4b",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000036-4c951c7ef119",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 37,
+      "policy_version": "fo_npg/seed=0/rollout/step=32",
+      "state_digest": "abe23b4fc6a6f162c62ebab47cfb1df9ec699238d6930b3077103be42c98b8a0",
+      "adapter_model_sha256": "407ed51d1eeb8c60faf4516b9a83dfcb73fabd89931f361e286a9e54cbca6f86",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000037-abe23b4fc6a6",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 38,
+      "policy_version": "fo_npg/seed=0/rollout/step=33",
+      "state_digest": "a03dd1342fb3eaad544f4b02279f30f6989942dc4bdcfe59b61067a3d8384df1",
+      "adapter_model_sha256": "44733a6afc98cf65f9b2cfbe9c4fae668eeb7692c6432dd3eb745c124eab4380",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000038-a03dd1342fb3",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 39,
+      "policy_version": "fo_npg/seed=0/rollout/step=34",
+      "state_digest": "d7d91e995ae552fa62150cd2c9d25f75fb1a7c1b62e707edc8283fcf9e923085",
+      "adapter_model_sha256": "3ba68b9a40ed492e3e85e58bf983d68c074a340e73b759c42660173fec441f9e",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000039-d7d91e995ae5",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 40,
+      "policy_version": "fo_npg/seed=0/rollout/step=35",
+      "state_digest": "8d2c7e19f550085701ecc12c50d208aa41ff85109f58e3e883fd6e02776cec73",
+      "adapter_model_sha256": "821d07042004c084f5bd1f1aa9a293b8c6cf5ea1d2a695e0bdf9be60629dd668",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000040-8d2c7e19f550",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 41,
+      "policy_version": "fo_npg/seed=0/rollout/step=36",
+      "state_digest": "48469d0c3d65aba6e24c9036cdde8cbe473b49c308a75e4ba82fecb0ccc4944a",
+      "adapter_model_sha256": "1764ae669cc8ad489a4442b3cbd7996bb9cf3c9f8df1e6b452b11d136f363969",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000041-48469d0c3d65",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 42,
+      "policy_version": "fo_npg/seed=0/rollout/step=37",
+      "state_digest": "6e852f2914eb19e2e84e1b552573a14695db95ccf6a7dc8251c05a0d1d27544c",
+      "adapter_model_sha256": "6b1f7f8acd7ead98fb22a741ef4e09f9f8655cc6f03b03f45a842dcec7775aba",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000042-6e852f2914eb",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 43,
+      "policy_version": "fo_npg/seed=0/rollout/step=38",
+      "state_digest": "79437d6a2f2bcba299b9eb138b1f565ab801f0f314ae1079daf88c9c862d4e48",
+      "adapter_model_sha256": "1b9a7ae67a9e8be5d895bf2ebb3b839dc76994c1045edcaf551723b2be2397c8",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000043-79437d6a2f2b",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 44,
+      "policy_version": "fo_npg/seed=0/rollout/step=39",
+      "state_digest": "59d67edc9b5f483eeb85384a6e4a6c53ccb101c962ddd5d50e93d2d0ec590b4c",
+      "adapter_model_sha256": "0c93544d435591ecc69281ab290812ad08e503bd667121a9bdb265eba4ff5c76",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000044-59d67edc9b5f",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 45,
+      "policy_version": "fo_npg/seed=0/rollout/step=40",
+      "state_digest": "e3733c5022f07127b9587e301bf58ea1c43bb9bc8aa7c281c4b382ebdd649f39",
+      "adapter_model_sha256": "8c5263a6e04e08d6ca0cf47da278b2c208532f69043ae24eb57ebba753a922e1",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000045-e3733c5022f0",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 46,
+      "policy_version": "fo_npg/seed=0/validation/step=40",
+      "state_digest": "b4acc51412f81797bd46ed1adb2f8a91834f0f419d77a06e6d96868f667099e0",
+      "adapter_model_sha256": "3a46bc7f933e040a61ff3a6dbb011a3293b69a52d1e1c6ae226bee17212ab1c3",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000046-b4acc51412f8",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 47,
+      "policy_version": "fo_npg/seed=0/rollout/step=41",
+      "state_digest": "b4acc51412f81797bd46ed1adb2f8a91834f0f419d77a06e6d96868f667099e0",
+      "adapter_model_sha256": "3a46bc7f933e040a61ff3a6dbb011a3293b69a52d1e1c6ae226bee17212ab1c3",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000047-b4acc51412f8",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 48,
+      "policy_version": "fo_npg/seed=0/rollout/step=42",
+      "state_digest": "61df1b574ef899188e6e9a687eb49036b9f4d7b6419351be71d8bbd3935ae713",
+      "adapter_model_sha256": "a568389e389e8bbe07c2508d2e79a0c0970beffce070aca99a20062ca2998bdb",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000048-61df1b574ef8",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 49,
+      "policy_version": "fo_npg/seed=0/rollout/step=43",
+      "state_digest": "81fae2dee44a4f372ad9f95ec1b5f391eb108ad73b1e472a4b01afc86dc5d0f6",
+      "adapter_model_sha256": "fe743570025ae0875e8f5cb3cce00fdcd324f7b660d42f0c9c1fb7ef1fa37ea5",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000049-81fae2dee44a",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 50,
+      "policy_version": "fo_npg/seed=0/rollout/step=44",
+      "state_digest": "c334282717bc6e7a06a42eabb5c738aac66129ce52e5502363db9b76da464e51",
+      "adapter_model_sha256": "eb0d6215f2bb588d3d685e8457c3dbe3c7615e7bddd2ab31839a6d7522665dce",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000050-c334282717bc",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 51,
+      "policy_version": "fo_npg/seed=0/rollout/step=45",
+      "state_digest": "7526165be9ce4592bd1d878858bc22e650476fe9c56cf5f32c9fa3351d7120d4",
+      "adapter_model_sha256": "c46942765f3a6a847b18c73591d753f8525e0ba8d434a596b62928d7f310bd09",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000051-7526165be9ce",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 52,
+      "policy_version": "fo_npg/seed=0/rollout/step=46",
+      "state_digest": "f4179656a4794f9f5f724678f6d0e8b6b1f76feaacfe18d5506ddff74d17b709",
+      "adapter_model_sha256": "858ba9bf3f4de316d58d9c9b6a2b309da52edd15db07507e062bfb21e0653020",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000052-f4179656a479",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 53,
+      "policy_version": "fo_npg/seed=0/rollout/step=47",
+      "state_digest": "e011184a31de46d61957f9369421f81de6ecb2c224b5735d0b164fe6870ab0a9",
+      "adapter_model_sha256": "caa146a028cc092219e84f1e07a52a285f9e88cc7fd34fbd6fbb8fbf6b5dd943",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000053-e011184a31de",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 54,
+      "policy_version": "fo_npg/seed=0/rollout/step=48",
+      "state_digest": "379e8453e8b49256c1c04d074ab946cb3e6ccbee4f5a1b28b31f272c008f42c4",
+      "adapter_model_sha256": "cb33f9dbdd7ddd203f02dfd133fcefa440a3dd8d0aa18d4e32d664de9c17c284",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000054-379e8453e8b4",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 55,
+      "policy_version": "fo_npg/seed=0/rollout/step=49",
+      "state_digest": "1339050e9cd808764281d17501540937f988645df2d4295765ea2e3c17087b3c",
+      "adapter_model_sha256": "fd9413f349cfdbb44daff5e7b0a504ac47b2997ca4d0c1dbc716247952b1d166",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000055-1339050e9cd8",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 56,
+      "policy_version": "fo_npg/seed=0/rollout/step=50",
+      "state_digest": "b99c901504e8e8c147d4d143b2c5bf65b5a752e68e08681ecbb0e41096f275b6",
+      "adapter_model_sha256": "1fc17abe31a6aa8585035dfa2f135a49b3693589e2b5676148ae8d757f25dac1",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000056-b99c901504e8",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 57,
+      "policy_version": "fo_npg/seed=0/rollout/step=51",
+      "state_digest": "b99c901504e8e8c147d4d143b2c5bf65b5a752e68e08681ecbb0e41096f275b6",
+      "adapter_model_sha256": "1fc17abe31a6aa8585035dfa2f135a49b3693589e2b5676148ae8d757f25dac1",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000057-b99c901504e8",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 58,
+      "policy_version": "fo_npg/seed=0/rollout/step=52",
+      "state_digest": "7945a69bf5ba798e81cc62edb57bfc01a6632690021fdb0ccae39e7d268698a3",
+      "adapter_model_sha256": "9c4b2f915326618c3011ede508baa3b0b921342810a0b38a7468673a2359db79",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000058-7945a69bf5ba",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 59,
+      "policy_version": "fo_npg/seed=0/rollout/step=53",
+      "state_digest": "7f7de840b0e7d2584400c18c2f1bf283e076d82ae00598208fcd3cfa93f4734f",
+      "adapter_model_sha256": "08e39b5b64a4ac03e30bdcfa69da4044be488382d6e83d72f7e1200f244034b7",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000059-7f7de840b0e7",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 60,
+      "policy_version": "fo_npg/seed=0/rollout/step=54",
+      "state_digest": "c0991ba4f3b7f1fe3f98332b90989241b3189a564f1cdf723afb57f3c3fe5f1c",
+      "adapter_model_sha256": "10450bfb7ded7238b3b66738d7d6b0c2fa4301547963b6e00a487215b4846bca",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000060-c0991ba4f3b7",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 61,
+      "policy_version": "fo_npg/seed=0/rollout/step=55",
+      "state_digest": "df064bafedd938aefcd65d0be59df215f2ef906fe7879e914927ecce01244409",
+      "adapter_model_sha256": "10eb4a6a205a68e54c789a557673cd5c653ace95599ce72541f319b27676d0c2",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000061-df064bafedd9",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 62,
+      "policy_version": "fo_npg/seed=0/rollout/step=56",
+      "state_digest": "8fb40052c5ee36072ff1bbd49378ff9a714deb4201f42a29458f18f973404eca",
+      "adapter_model_sha256": "24fa49677cd29b59da7485170b44b0440cc8c51e856a47fc342ecc3699ef79f8",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000062-8fb40052c5ee",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 63,
+      "policy_version": "fo_npg/seed=0/rollout/step=57",
+      "state_digest": "80a7174e94fb4248bc111138246a5df54f1b80c9f5f032d668cd3468068742e2",
+      "adapter_model_sha256": "4df3e6bad78908d8308231502be3c5d7abf4b91e8af033c3769a86b3eb45aa45",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000063-80a7174e94fb",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 64,
+      "policy_version": "fo_npg/seed=0/rollout/step=58",
+      "state_digest": "8f909240eb25ea953c457d484a65059e90d58d4b5c2ebee83d0a37a140ea34e3",
+      "adapter_model_sha256": "edb8ae8798f3c0c9651d332f59cb49707ee6634d47e2b711a74f23afed70c466",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000064-8f909240eb25",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 65,
+      "policy_version": "fo_npg/seed=0/rollout/step=59",
+      "state_digest": "d9b888170861912f5c2e68bfccd3adadf49dd818bd493d0fe0539f8a9dc00be9",
+      "adapter_model_sha256": "46c6000f0239930f85fc09e1c6456790ccbb35b15e0074e35a0db1bd9b9507fd",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000065-d9b888170861",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 66,
+      "policy_version": "fo_npg/seed=0/rollout/step=60",
+      "state_digest": "e8e281a6302af0a1fd6186578932a9200617b2a988565c91ac75f736ba3f54a4",
+      "adapter_model_sha256": "0193c49568eb1e5368ef0116e1d08593639adf798e09f22eb0fd2df1bcec57dc",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000066-e8e281a6302a",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 67,
+      "policy_version": "fo_npg/seed=0/validation/step=60",
+      "state_digest": "ebaaa986618f634f9f7de4952bf77aefabdd1c7b5f0f27741d68da7187c023ee",
+      "adapter_model_sha256": "7d6e492a237b443d7782d066d537a94276e1c9c6d703f86b5eed8f28576de0a3",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000067-ebaaa986618f",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 68,
+      "policy_version": "fo_npg/seed=0/rollout/step=61",
+      "state_digest": "ebaaa986618f634f9f7de4952bf77aefabdd1c7b5f0f27741d68da7187c023ee",
+      "adapter_model_sha256": "7d6e492a237b443d7782d066d537a94276e1c9c6d703f86b5eed8f28576de0a3",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000068-ebaaa986618f",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 69,
+      "policy_version": "fo_npg/seed=0/rollout/step=62",
+      "state_digest": "4acee335f7439bd62bb495cd435572357091cf353795327a6810f4d2e210cf22",
+      "adapter_model_sha256": "0340e3731b2e7a420832b8dad795144f95c53da676b55e635b3bbc9f3641b519",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000069-4acee335f743",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 70,
+      "policy_version": "fo_npg/seed=0/rollout/step=63",
+      "state_digest": "9ca66fd6f3bd7c42029cd020bf4758f27a710942c2c2551226ea332a3b80d918",
+      "adapter_model_sha256": "eb0737d7fa2229c75e7d3c0f387051a905b997eb0bcca2b66564cc419e9f8572",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000070-9ca66fd6f3bd",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 71,
+      "policy_version": "fo_npg/seed=0/rollout/step=64",
+      "state_digest": "651a4f5e3a0aa44a2b4606879b64fd9ad9944b5ad0674cb31686aacb977bbc30",
+      "adapter_model_sha256": "7c291effb468840b8a850358471cb9fea7f12b3aea876cb04e1a1f05c881d3d7",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000071-651a4f5e3a0a",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 72,
+      "policy_version": "fo_npg/seed=0/rollout/step=65",
+      "state_digest": "e1fbf500394f1af9d50e3397d82ba2feb1c18a7ec9bf540554fa8eced8094d4a",
+      "adapter_model_sha256": "abf7fd4b4836c53d7fe5d8588b2cea6c8cb38bbae9e144f58cc6bb51723b48ce",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000072-e1fbf500394f",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 73,
+      "policy_version": "fo_npg/seed=0/rollout/step=66",
+      "state_digest": "cf1dec070be4e29c781c58756245a0e2f167634abc335d85871c0b6c59a6fa01",
+      "adapter_model_sha256": "0898ed96c73a7b9cbb624f57a0e27db4e35c12e1db1328b674b5a36dbae12a91",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000073-cf1dec070be4",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 74,
+      "policy_version": "fo_npg/seed=0/rollout/step=67",
+      "state_digest": "634d2aa34cd89fa360c5844c83e71b9dc6b559955ad62e0829003bf80d930828",
+      "adapter_model_sha256": "18124e38027a4d54879c6a5d0c1364158217ac5769bbe8b90c8310265b1cfbb9",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000074-634d2aa34cd8",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 75,
+      "policy_version": "fo_npg/seed=0/rollout/step=68",
+      "state_digest": "0dd79edbe71efac9e24d45679657a5893020668bcdb46c1fe8f6843321480ffc",
+      "adapter_model_sha256": "4e6c47fbbcaafecc79bc9e864b2fb1aa5347c76c9acb1c6f63d1210ceee1acb5",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000075-0dd79edbe71e",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 76,
+      "policy_version": "fo_npg/seed=0/rollout/step=69",
+      "state_digest": "0dd79edbe71efac9e24d45679657a5893020668bcdb46c1fe8f6843321480ffc",
+      "adapter_model_sha256": "4e6c47fbbcaafecc79bc9e864b2fb1aa5347c76c9acb1c6f63d1210ceee1acb5",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000076-0dd79edbe71e",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 77,
+      "policy_version": "fo_npg/seed=0/rollout/step=70",
+      "state_digest": "e4f1f9258223429edb913c4bb2d69bd8ce3e7bcba0ffa5982a9331ebb8f4f7c3",
+      "adapter_model_sha256": "95cbed01246460644952e66b5b8f57d9cc39907d9368a58129acde018d996556",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000077-e4f1f9258223",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 78,
+      "policy_version": "fo_npg/seed=0/rollout/step=71",
+      "state_digest": "d31f3be3e90d8cba96f628d41b31b3a17b12711aa98d4a715f40641391b41188",
+      "adapter_model_sha256": "fd98a564dc424e50aaa09f21215dfdb172cd04d961bdf0fad8492aa6bf6dd630",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000078-d31f3be3e90d",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 79,
+      "policy_version": "fo_npg/seed=0/rollout/step=72",
+      "state_digest": "e2c03e2d77c503fb36549c3d561fb22966efae40dbcc22e4593a8216470aecd9",
+      "adapter_model_sha256": "b1da53cdb04a73425b102fd21e7acb3e7d44d4b948892400d1b5b870edd8fed8",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000079-e2c03e2d77c5",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 80,
+      "policy_version": "fo_npg/seed=0/rollout/step=73",
+      "state_digest": "da0be9f2a916770ed01aaab0bd4e5bb5d2f553e8875343e1b4a59498e221c045",
+      "adapter_model_sha256": "ade73e18a443b59c6a53a860ea94e84eec530d560d847a1783333f6284ce08fb",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000080-da0be9f2a916",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 81,
+      "policy_version": "fo_npg/seed=0/rollout/step=74",
+      "state_digest": "90702f894d17e54427d08b36c34af7ca2200d61473f2b7eab3c11a495be9c2c8",
+      "adapter_model_sha256": "459d04d61e3a0b8e7f57d65bcd06fe9118c47d91a1f48239af2051ba58c608d4",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000081-90702f894d17",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 82,
+      "policy_version": "fo_npg/seed=0/rollout/step=75",
+      "state_digest": "9767ba11b61a582001d0568af66a44c64fd232c87db5281d260f9739cece8871",
+      "adapter_model_sha256": "3755dcf4932cf070fca9c0728d2a06d44d6a61cc059f32dad248afdb16937913",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000082-9767ba11b61a",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 83,
+      "policy_version": "fo_npg/seed=0/rollout/step=76",
+      "state_digest": "7d42c4918e4e2f616bd1a43724a7ba692127b91facdd37012a51815e2ceb88bb",
+      "adapter_model_sha256": "a47c2d48e2e938c89ca7fa8ec7594da673f37b721892b500ee7cf862efa78269",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000083-7d42c4918e4e",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 84,
+      "policy_version": "fo_npg/seed=0/rollout/step=77",
+      "state_digest": "bf8e8c94ee299e7d380c5f025e61178eab20376da1beaf64ae34302edde86b26",
+      "adapter_model_sha256": "98ad62bcf50d729b69b9182f8ca5a4545c6b4d46fdd6d50bf9db7bfef6a05936",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000084-bf8e8c94ee29",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 85,
+      "policy_version": "fo_npg/seed=0/rollout/step=78",
+      "state_digest": "bf8e8c94ee299e7d380c5f025e61178eab20376da1beaf64ae34302edde86b26",
+      "adapter_model_sha256": "98ad62bcf50d729b69b9182f8ca5a4545c6b4d46fdd6d50bf9db7bfef6a05936",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000085-bf8e8c94ee29",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 86,
+      "policy_version": "fo_npg/seed=0/rollout/step=79",
+      "state_digest": "8116dfa609fbb04fe1e76a3d3c83dcff8c7297657f3283488109f30ce1324330",
+      "adapter_model_sha256": "84a70f06ff05f6e0e12c338d8da3d0bd4137f30a6e84e4e9c06f550e39f76f71",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000086-8116dfa609fb",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 87,
+      "policy_version": "fo_npg/seed=0/rollout/step=80",
+      "state_digest": "8116dfa609fbb04fe1e76a3d3c83dcff8c7297657f3283488109f30ce1324330",
+      "adapter_model_sha256": "84a70f06ff05f6e0e12c338d8da3d0bd4137f30a6e84e4e9c06f550e39f76f71",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000087-8116dfa609fb",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 88,
+      "policy_version": "fo_npg/seed=0/validation/step=80",
+      "state_digest": "b283c38371641db0a0d53b1f5a5830ec7d050d34630692ccd59f016b7977cf44",
+      "adapter_model_sha256": "6faf4c6af4a618087281ca99a294d2f7d5e15d603db95bc6fd0344ad4540ef39",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000088-b283c3837164",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 89,
+      "policy_version": "fo_npg/seed=0/rollout/step=81",
+      "state_digest": "b283c38371641db0a0d53b1f5a5830ec7d050d34630692ccd59f016b7977cf44",
+      "adapter_model_sha256": "6faf4c6af4a618087281ca99a294d2f7d5e15d603db95bc6fd0344ad4540ef39",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000089-b283c3837164",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 90,
+      "policy_version": "fo_npg/seed=0/rollout/step=82",
+      "state_digest": "12ecf569ac6df5e9f7fb354c31c207c421a475893a1eb75211d8e50a24441621",
+      "adapter_model_sha256": "9e4882e654fa34e7331e58828f22a2697d5701662b5509a9bc9cbe0d5326cea1",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000090-12ecf569ac6d",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 91,
+      "policy_version": "fo_npg/seed=0/rollout/step=83",
+      "state_digest": "9673c08dfee587fb3eaa44717ce0fb5d60f1c80ba319f442528a868201dbb2cf",
+      "adapter_model_sha256": "d52658f8437c8feba15276adc9817ff12bcebf356591aed533762890604c46e2",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000091-9673c08dfee5",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 92,
+      "policy_version": "fo_npg/seed=0/rollout/step=84",
+      "state_digest": "7b5d8e1d330e4a9d9984fb8e123b277b2b7a42aebf1bcd52c5c3e47c1e203991",
+      "adapter_model_sha256": "3f356d9befcfbb8914f587b8acdaebe2566159fb748decd9c4a2e1a80cfba5c6",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000092-7b5d8e1d330e",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 93,
+      "policy_version": "fo_npg/seed=0/rollout/step=85",
+      "state_digest": "1b447da83d4a04e77663041a6a1465c984c0979bfa267ea90622a6309d170640",
+      "adapter_model_sha256": "5112b2a06a4fb1976dbe6a36c51a72cc214c6da4b025545e91e94706df2e0c34",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000093-1b447da83d4a",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 94,
+      "policy_version": "fo_npg/seed=0/rollout/step=86",
+      "state_digest": "92ad0ee7e4bb1358d8ce751fbe150c0983ca61bce8bc970cdd336a28e487b029",
+      "adapter_model_sha256": "c5a0bee10d02849e4173c039c55b041df4bff224780384abde657a19e4805e6c",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000094-92ad0ee7e4bb",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 95,
+      "policy_version": "fo_npg/seed=0/rollout/step=87",
+      "state_digest": "4f063a47f187256bbbdec223d5b3159b77a93d8f593a8aa9a007b93dc7387f91",
+      "adapter_model_sha256": "1f0878f691f6ed653005e172494b1d3c3320126a34e5508dba844b85757e6ea1",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000095-4f063a47f187",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 96,
+      "policy_version": "fo_npg/seed=0/rollout/step=88",
+      "state_digest": "c77ec805880f72d402fb79d4aeb1bd22b1801b276360f9232248534e4d3e0ebf",
+      "adapter_model_sha256": "a6ac9fd214773e8ed43bf673e8a986fa6a8ef3161870c4151efe240c4c0de448",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000096-c77ec805880f",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 97,
+      "policy_version": "fo_npg/seed=0/rollout/step=89",
+      "state_digest": "c93e84438678f974ad8c852895cf580b69a84ba9f1ff1f7c7c671cef79666c82",
+      "adapter_model_sha256": "2c72107f92ba22aedde6ab53fa35572e96ae03b1a03ef88d08ac5ce1348e3b42",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000097-c93e84438678",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 98,
+      "policy_version": "fo_npg/seed=0/rollout/step=90",
+      "state_digest": "4a3c0780debbec1511d31fd9a9856a8a4dac3cf0ffae1a8519997495d0e3971b",
+      "adapter_model_sha256": "f7d428356a92373011534f7e23dc5b225b0199210d954c140a40eb457819bdec",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000098-4a3c0780debb",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 99,
+      "policy_version": "fo_npg/seed=0/rollout/step=91",
+      "state_digest": "d0ae25e8bbf1dca0140fa8fbd236370aaf0518ca906d6e7664cb5b90563850ec",
+      "adapter_model_sha256": "b145743167e323e8269f7468ede42a6ba2fc65d4517602b298a983c8fa2b42cb",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000099-d0ae25e8bbf1",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 100,
+      "policy_version": "fo_npg/seed=0/rollout/step=92",
+      "state_digest": "b5ace0ce1582ca997c3a32fd0858246050524e0ba14fd3717b698f1e6251e753",
+      "adapter_model_sha256": "f2f1f21b3a89e2a53dd19d49305d0af4e4747f27e52626facb8d3be0fef3e3af",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000100-b5ace0ce1582",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 101,
+      "policy_version": "fo_npg/seed=0/rollout/step=93",
+      "state_digest": "8f69160d76368eb433a6fff3b67a42f967021f254a553af9fcf722ceef65137a",
+      "adapter_model_sha256": "b3543e55a382ce45c77917331f097017ca54d7266128e0c1e92b319f179b7891",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000101-8f69160d7636",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 102,
+      "policy_version": "fo_npg/seed=0/rollout/step=94",
+      "state_digest": "1dd7c473c8dafe82ea52344daa0de76112d42e4bbad06f5d21b1d5b7afff1d4d",
+      "adapter_model_sha256": "ad91ead1991a6e6b01d392574aef86cdd05ccff4c1efbf88c7e28859485bfd27",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000102-1dd7c473c8da",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 103,
+      "policy_version": "fo_npg/seed=0/rollout/step=95",
+      "state_digest": "1321ed4e65153fb97f21041d98385389bca5b50e1489f9a528038019a09d4be3",
+      "adapter_model_sha256": "6e8f2229740745ea1f728c81a360fdd4cb736f0decc08665ad9bab9f25d0c71b",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000103-1321ed4e6515",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 104,
+      "policy_version": "fo_npg/seed=0/rollout/step=96",
+      "state_digest": "424f13ae5a0816fe74fc1303606d5885cf52824b8c6ea709b1042c11863d0220",
+      "adapter_model_sha256": "f2309d06137daefcbc41360898296ad13e89d90dd088a05d39fb99427ddf7aed",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000104-424f13ae5a08",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 105,
+      "policy_version": "fo_npg/seed=0/rollout/step=97",
+      "state_digest": "4e3dd3fce1d8d530371d0d3fe6e7504cc43026b2d128f1180d27272bd0a4e796",
+      "adapter_model_sha256": "81d322b19a8711416b5556b21be93d495fa0cd17b92093fe6d079c0220daa135",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000105-4e3dd3fce1d8",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 106,
+      "policy_version": "fo_npg/seed=0/rollout/step=98",
+      "state_digest": "b0b18cf0ae99e5aed8aa36d183cb62d40c6745c036799be7323dbac331a1bb84",
+      "adapter_model_sha256": "b4df430a7a7d5ebb1c8a873f24433883408527413e5b006eb401b3f9447e912d",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000106-b0b18cf0ae99",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 107,
+      "policy_version": "fo_npg/seed=0/rollout/step=99",
+      "state_digest": "81d9861ec56a9dcbe53a6b36d5ba6273027891ea3bf775542707f6089321c4e4",
+      "adapter_model_sha256": "5d3d344256e00d5a9ba388a4f8042881f2eb2b6800f0edd2962ca3b53c9ac5ed",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000107-81d9861ec56a",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 108,
+      "policy_version": "fo_npg/seed=0/rollout/step=100",
+      "state_digest": "752db061c94db5f82961dc1db9abd5399bb0f8cb809ac691d230de8f497ecbe5",
+      "adapter_model_sha256": "ab85d64c0f56b9245fa18e40126045940f0b55503ca097f035d922eaec4d7db5",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000108-752db061c94d",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    },
+    {
+      "version": 109,
+      "policy_version": "fo_npg/seed=0/validation/step=100",
+      "state_digest": "f9c3a921dcf1af1641ea05d140088c069f959052168e7433ff7de7d3c7ee77d4",
+      "adapter_model_sha256": "0d153031c08ccdd02f6f26e42d0c002538ec872f58d58e00292cfe37525c9dd4",
+      "parameter_count": 1089536,
+      "adapter_path": "/home/amodo/rl-no-backward-results/matched-full100-69f1fcd/vllm_lora_exports/fo_npg_seed0/adapter-000109-f9c3a921dcf1",
+      "active_lora_ids": [
+        1
+      ],
+      "prefix_cache_reset": true,
+      "load_inplace": true,
+      "adapter_path_transient": true,
+      "durable_hash_fields": [
+        "state_digest",
+        "adapter_model_sha256"
+      ]
+    }
+  ],
+  "vllm_same_id_reload_gate": {
+    "passed": true,
+    "lora_int_id": 1,
+    "changed_lora_b_tensor_count": 56,
+    "perturbation": 0.05,
+    "initial": {
+      "policy_version": "same-id-reload-gate/initial",
+      "state_digest": "fc61cc8ca79ddb4d1964b2fa12710e983fb76ced22cf848b4ba57f6a1d011089",
+      "token_id": 1249,
+      "selected_token_logprob": -0.5263524055480957
+    },
+    "changed": {
+      "policy_version": "same-id-reload-gate/changed",
+      "state_digest": "44e0a7f2071040f7b52b100d23fa622ded775e11672bdfc9404ba19a8ac92ca4",
+      "token_id": 1249,
+      "selected_token_logprob": -0.7200657725334167
+    },
+    "restored": {
+      "policy_version": "same-id-reload-gate/restored",
+      "state_digest": "fc61cc8ca79ddb4d1964b2fa12710e983fb76ced22cf848b4ba57f6a1d011089",
+      "token_id": 1249,
+      "selected_token_logprob": -0.5263524055480957
+    },
+    "restored_selected_logprob_abs_difference": 0.0
+  },
+  "process_isolation": "fresh_python_process_per_method_seed",
+  "process_id": 3074863,
+  "source_commit_verified_in_child": "69f1fcd21e8d94427dd769c7c03791021602627a",
+  "memory_measurement_scope": {
+    "allocator": "PyTorch CUDA allocator",
+    "scope": "combined HF scorer/trainer plus colocated vLLM engine in child process",
+    "vllm_worker_excluded": false
+  },
+  "fo_reverse_mode_modules_called": false,
+  "fo_backprop_module_imported": false
+}

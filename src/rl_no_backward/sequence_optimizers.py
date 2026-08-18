@@ -11,6 +11,7 @@ from .sequence_backprop import (
     make_sequence_grpo_optimizer,
     sequence_grpo_step,
 )
+from .sequence_fastpath import FusedProbeConfig, enable_batched_probe_adapters
 from .sequence_forward_only import (
     ForwardSequenceConfig,
     ForwardSequenceMethod,
@@ -29,9 +30,11 @@ __all__ = [
     "ForwardSequenceConfig",
     "ForwardSequenceMethod",
     "ForwardSequenceStepResult",
+    "FusedProbeConfig",
     "SequenceActiveSubspace",
     "SequenceStepResult",
     "directional_sequence_score_statistics",
+    "enable_batched_probe_adapters",
     "forward_sequence_step",
     "make_sequence_grpo_optimizer",
     "sampled_sequence_kl",

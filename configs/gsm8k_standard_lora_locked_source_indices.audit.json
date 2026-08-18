@@ -1,0 +1,113 @@
+{
+  "access_sources": {
+    "development_source_receipt": {
+      "dev_ids_sha256": "c626e4bfefb61569a581d2f6290afc03212118cb30f2568d2bf8ffb9662339b2",
+      "dev_source_indices_sha256": "f0d488e40dd5be00f3c4b67e2430e1fddbbf2674ecc83486c3e62d51c42efb8e",
+      "evaluation_manifest_sha256": "4046b03c22bc7b6016aaa921d0de9aeee6dc3cf6c7e0b18998222e2df5189793",
+      "fields_used": [
+        "schema",
+        "dataset_id",
+        "dataset_config",
+        "dataset_revision",
+        "evaluation_manifest_sha256",
+        "official_test_count",
+        "dev_count",
+        "entries[].source_index",
+        "entries[].example_id",
+        "receipt_sha256"
+      ],
+      "file_sha256": "d662b18c333586afe776f6f1bf7b01904889474e05c75ec66989d57ad809d8e7",
+      "receipt_sha256": "52717c50b760d627da408aeb7f5c9812da1e85c86dcdcd23203e5cff84b0a39e",
+      "row_count": 256
+    },
+    "manifest": {
+      "fields_used": [
+        "manifest_sha256",
+        "official_test_ids_sha256",
+        "excluded_test_example_ids",
+        "dev_example_ids",
+        "locked_test_example_ids",
+        "prior_metadata_receipts"
+      ],
+      "file_sha256": "d7a43765f1f964ddaef6a1a08efbe56a0737a2efcbee633755c3af2c97699564"
+    },
+    "prior_exposure_question_samples": [
+      {
+        "committed_metadata_source": "artifacts/pilot_gsm8k_1p5b/metadata.json",
+        "committed_question_source": "configs/gsm8k_pilot_128_question_projection.json",
+        "completion_values_used": false,
+        "fields_used": [
+          "example_id",
+          "question"
+        ],
+        "metadata_file_sha256": "59299f926b9a3e5f560d73d4d233842dbebd12d7526805642bd668971c4297bc",
+        "metadata_test_ids_sha256": "b62d4ef95b08d54014ff9a2438a687bffa87ad012476b2d80f0f3cb5cec63af9",
+        "projection_parser": "selective JSON lexer; nonselected values skipped without decoding",
+        "question_projection_sha256": "c1b3eae95f62111452451abd417be72b5468a9485c3f7fb5d0901cb651987140",
+        "question_sample_file_sha256": "c91617e5538b362ddce417795df72faa9088dc8666ed7b0edb92da6f6cc306d8",
+        "reference_answer_values_used": false,
+        "row_count": 128
+      },
+      {
+        "committed_metadata_source": "artifacts/pilot_residual_core_v3/metadata.json",
+        "committed_question_source": "artifacts/pilot_residual_core_v3/samples/gsm8k_base_seed0.json",
+        "completion_values_used": false,
+        "fields_used": [
+          "example_id",
+          "question"
+        ],
+        "metadata_file_sha256": "d3a3add74fe0a4ef2dcd9b1a766a90ad00db2a0b129d77ef58355f44c946f8b1",
+        "metadata_test_ids_sha256": "81e2477d75cadbff48b6e6878d3127d83dd3c70ae72d5096c14a27072a1f428a",
+        "projection_parser": "selective JSON lexer; nonselected values skipped without decoding",
+        "question_projection_sha256": "bbc31e5c30e6e55a7bedd52e56d7bb541a7c5b79150bb107249bd8aebf3177ef",
+        "question_sample_file_sha256": "8502645c8c591539904873f2f9f59669f6992c79c9b829313b6211f5e49f8bdf",
+        "reference_answer_values_used": false,
+        "row_count": 256
+      }
+    ],
+    "touched_test_quarantine": {
+      "evaluation_manifest_sha256": "4046b03c22bc7b6016aaa921d0de9aeee6dc3cf6c7e0b18998222e2df5189793",
+      "excluded_test_ids_sha256": "2478bbf24bf3f4c68797c345a8e5fad20d13081c27974aef89945f6bd6748799",
+      "fields_used": [
+        "schema_version",
+        "test_example_ids"
+      ],
+      "file_sha256": "6ff9217944afd98daf5b5b44be96580a1984974006cfd46be3c652fb4289e9d0",
+      "row_count": 384,
+      "schema_version": 1
+    }
+  },
+  "audit_sha256": "add820b84a0edad94f9f1dba4dbd452ca79b69133829a323bef26d7b1679350a",
+  "dataset": {
+    "column_projection": "pyarrow.parquet.read_table(columns=['question'])",
+    "config": "main",
+    "id": "openai/gsm8k",
+    "repository_file": "main/test-00000-of-00001.parquet",
+    "revision": "740312add88f781978c0658806c59bc2815b9866",
+    "row_count": 1319,
+    "row_value_columns_materialized": [
+      "question"
+    ],
+    "row_value_columns_not_materialized": [
+      "answer"
+    ],
+    "split": "test"
+  },
+  "evaluation_manifest_sha256": "4046b03c22bc7b6016aaa921d0de9aeee6dc3cf6c7e0b18998222e2df5189793",
+  "locked_membership_derivation": "source-index complement of exact quarantined question/ID evidence and committed development indices",
+  "model_evaluation_performed": false,
+  "official_question_ids_sha256": "7e3c2423b3d0acc4013d30d6fdd8776b90467d7924bc5a24f4a3a49ace3f5110",
+  "official_test_ids_sha256": "08e328b75ecd6bfdae9294563213c6f2e2b58d0b484db4fc8944c7f3dd6274a1",
+  "opaque_locked_example_id_verification": "deferred_to_authorized_evaluator",
+  "partition": {
+    "dev_count": 256,
+    "dev_source_indices_sha256": "f0d488e40dd5be00f3c4b67e2430e1fddbbf2674ecc83486c3e62d51c42efb8e",
+    "excluded_count": 384,
+    "excluded_source_indices_sha256": "ec452b3057b9bdeb11fec4ac98c0d3d350525fcfec596b288071f29d4c71e0d9",
+    "locked_source_indices_sha256": "d4cf19e6eb1b42569c6c27bd13889a681f61b1d12ffc75f2ba0fe5c4b0df21d6",
+    "locked_test_count": 679,
+    "partition_source_indices_sha256": "0753a7020f91ca256f0544535a92348e9f0ea7855f77aae9b9cd18f0197ecfbd"
+  },
+  "reference_answer_values_used": false,
+  "schema": "rl-no-backward-gsm8k-locked-source-sealing-audit-v1"
+}

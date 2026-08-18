@@ -1,0 +1,15 @@
+{
+  "failed_hard_structural_checks": [],
+  "failed_stochastic_efficacy_checks": [],
+  "hard_structural_checks": {},
+  "hard_structural_checks_passed": true,
+  "initial_dev_accuracy": 0.65625,
+  "initial_lora_digest": "fc61cc8ca79ddb4d1964b2fa12710e983fb76ced22cf848b4ba57f6a1d011089",
+  "initial_train_accuracy": 0.875,
+  "passed": true,
+  "role": "non-updating baseline",
+  "schema": "rl-no-backward-matched-learning-gate-v2",
+  "stochastic_efficacy_checks": {},
+  "stochastic_efficacy_checks_enforced": false,
+  "stochastic_efficacy_observed_passed": true
+}

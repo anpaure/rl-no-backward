@@ -1,0 +1,497 @@
+{
+  "dataset": {
+    "calibration_example_ids": [
+      "31ad0573d1fa7a1d35f1",
+      "8574ccad3fbe31dc662e",
+      "94cf7cbe2110cd2344e8",
+      "32ba395b0c0225df0562",
+      "429894ce2eec986ca9c7",
+      "97a5d4d3dc8aff5f041f",
+      "c8c1858466fcb8415e5e",
+      "5dc175a659e890634809",
+      "8eddc932216d1aeb749d",
+      "180f612ec6dc9c3e0b50",
+      "d9dfde5a3d10ac502c0c",
+      "ce319611b51823c1e53a",
+      "88990a274bd3304585ef",
+      "f5d59fa584a95f3e2f49",
+      "b96a05bc6bc2b634ca01",
+      "81f82d5ca78b23c657ee"
+    ],
+    "config": "main",
+    "id": "openai/gsm8k",
+    "official_train_examples": 7473,
+    "official_train_only": true,
+    "revision": "740312add88f781978c0658806c59bc2815b9866",
+    "rollout_example_ids": [
+      "3440e84adca5431e66d0",
+      "36c4bc6f373e779b8425"
+    ],
+    "selection_seed": 2026,
+    "split": "train"
+  },
+  "diagnostic": "real_model_gsm8k_projected_finite_difference",
+  "elapsed_seconds": 22.71410324401222,
+  "environment": {
+    "cuda_runtime": "13.0",
+    "flash_attn": "2.8.3+cu130torch2.13",
+    "gpu": "NVIDIA H100 PCIe",
+    "hostname": "arboghast",
+    "python": "3.12.3",
+    "torch": "2.13.0+cu130"
+  },
+  "exact_backprop_oracle": {
+    "backward_calls": 1,
+    "clip_epsilon": 0.2,
+    "gradient_l2_norm": 0.008434825576841831,
+    "objective": "length-normalized token-clipped GRPO surrogate at policy center",
+    "optimizer_steps": 0,
+    "parameters_unchanged_after_backward": true,
+    "projected_gradient_coordinates": [
+      0.0006795993540436029,
+      0.0001694673701422289,
+      0.0005883737467229366,
+      1.663041621213779e-05,
+      -0.00039331824518740177,
+      0.00068303057923913,
+      0.0008476214134134352,
+      -0.00040877831634134054
+    ],
+    "surrogate_value": 7.450580596923828e-09
+  },
+  "finite_difference": {
+    "best_mu_by_projected_relative_l2_error": 2.0,
+    "directions": 8,
+    "mus": [
+      0.25,
+      0.5,
+      1.0,
+      2.0
+    ],
+    "results": [
+      {
+        "agreement_with_exact_projected_gradient": {
+          "absolute_l2_error": 0.0009006021466875073,
+          "cosine_similarity": 0.8756354897323372,
+          "estimate_l2_norm": 0.001854716473595818,
+          "estimate_nonzero": true,
+          "reference_l2_norm": 0.0015309560720988928,
+          "reference_nonzero": true,
+          "relative_l2_error": 0.5882612591573643
+        },
+        "agreement_with_full_backprop_gradient": {
+          "absolute_l2_error": 0.008343473094368645,
+          "cosine_similarity": 0.15893149783250646,
+          "estimate_l2_norm": 0.001854716571757323,
+          "estimate_nonzero": true,
+          "reference_l2_norm": 0.008434825755319118,
+          "reference_nonzero": true,
+          "relative_l2_error": 0.9891695852883666
+        },
+        "fisher": {
+          "correct_token_fisher_trace": 0.09517801635328146,
+          "correct_trace_nonzero": true,
+          "legacy_completion_outer_fisher_trace": 0.0008254056824386006,
+          "legacy_completion_score_normalization": "mean_token_score",
+          "legacy_to_correct_trace_ratio": 0.008672230353854638
+        },
+        "forward_calls": 16,
+        "full_prefix_calls": 0,
+        "mu": 0.25,
+        "policy_evaluations": 16,
+        "projected_gradient_coordinates": [
+          0.0009877036791294813,
+          -2.9720249585807323e-06,
+          0.0007849609246477485,
+          -0.0001477859477745369,
+          0.0002921536215581,
+          0.0010453928261995316,
+          0.0007378983427770436,
+          -0.0003220366488676518
+        ],
+        "scored_tokens": 68160,
+        "suffix_calls": 16,
+        "teacher_forced_examples": 256
+      },
+      {
+        "agreement_with_exact_projected_gradient": {
+          "absolute_l2_error": 0.0003934179783491394,
+          "cosine_similarity": 0.9681152409648127,
+          "estimate_l2_norm": 0.001569867857366758,
+          "estimate_nonzero": true,
+          "reference_l2_norm": 0.0015309560720988928,
+          "reference_nonzero": true,
+          "relative_l2_error": 0.256975353845245
+        },
+        "agreement_with_full_backprop_gradient": {
+          "absolute_l2_error": 0.008304049435033505,
+          "cosine_similarity": 0.17571694593931625,
+          "estimate_l2_norm": 0.0015698679587429082,
+          "estimate_nonzero": true,
+          "reference_l2_norm": 0.008434825755319118,
+          "reference_nonzero": true,
+          "relative_l2_error": 0.9844956702036027
+        },
+        "fisher": {
+          "correct_token_fisher_trace": 0.0672762767216342,
+          "correct_trace_nonzero": true,
+          "legacy_completion_outer_fisher_trace": 0.0006371966518825371,
+          "legacy_completion_score_normalization": "mean_token_score",
+          "legacy_to_correct_trace_ratio": 0.009471342394868772
+        },
+        "forward_calls": 16,
+        "full_prefix_calls": 0,
+        "mu": 0.5,
+        "policy_evaluations": 16,
+        "projected_gradient_coordinates": [
+          0.0007401382317766547,
+          0.0001614063512533903,
+          0.0008254923159256577,
+          -3.897440910805017e-05,
+          -0.00022600838565267622,
+          0.0004945677937939763,
+          0.0009197370382025838,
+          -0.0002570575743447989
+        ],
+        "scored_tokens": 68160,
+        "suffix_calls": 16,
+        "teacher_forced_examples": 256
+      },
+      {
+        "agreement_with_exact_projected_gradient": {
+          "absolute_l2_error": 0.0003304646598355054,
+          "cosine_similarity": 0.9767972576147151,
+          "estimate_l2_norm": 0.0015366929478373447,
+          "estimate_nonzero": true,
+          "reference_l2_norm": 0.0015309560720988928,
+          "reference_nonzero": true,
+          "relative_l2_error": 0.215855089416412
+        },
+        "agreement_with_full_backprop_gradient": {
+          "absolute_l2_error": 0.008301305083428209,
+          "cosine_similarity": 0.1772927720677927,
+          "estimate_l2_norm": 0.0015366930318168165,
+          "estimate_nonzero": true,
+          "reference_l2_norm": 0.008434825755319118,
+          "reference_nonzero": true,
+          "relative_l2_error": 0.9841703105951289
+        },
+        "fisher": {
+          "correct_token_fisher_trace": 0.0629143308844951,
+          "correct_trace_nonzero": true,
+          "legacy_completion_outer_fisher_trace": 0.0006516922488396075,
+          "legacy_completion_score_normalization": "mean_token_score",
+          "legacy_to_correct_trace_ratio": 0.010358407054126575
+        },
+        "forward_calls": 16,
+        "full_prefix_calls": 0,
+        "mu": 1.0,
+        "policy_evaluations": 16,
+        "projected_gradient_coordinates": [
+          0.0008631831733509898,
+          0.0001311443338636309,
+          0.0005064140423201025,
+          -0.0001686415052972734,
+          -0.00036442186683416367,
+          0.0007103800307959318,
+          0.0007861058693379164,
+          -0.00024257066252175719
+        ],
+        "scored_tokens": 68160,
+        "suffix_calls": 16,
+        "teacher_forced_examples": 256
+      },
+      {
+        "agreement_with_exact_projected_gradient": {
+          "absolute_l2_error": 0.0001831573411218787,
+          "cosine_similarity": 0.9943046117174491,
+          "estimate_l2_norm": 0.0014390222883506312,
+          "estimate_nonzero": true,
+          "reference_l2_norm": 0.0015309560720988928,
+          "reference_nonzero": true,
+          "relative_l2_error": 0.11963592193130383
+        },
+        "agreement_with_full_backprop_gradient": {
+          "absolute_l2_error": 0.00829674670406748,
+          "cosine_similarity": 0.1804704261031144,
+          "estimate_l2_norm": 0.001439022358630004,
+          "estimate_nonzero": true,
+          "reference_l2_norm": 0.008434825755319118,
+          "reference_nonzero": true,
+          "relative_l2_error": 0.9836298869405141
+        },
+        "fisher": {
+          "correct_token_fisher_trace": 0.05993375024662659,
+          "correct_trace_nonzero": true,
+          "legacy_completion_outer_fisher_trace": 0.0005921839238264094,
+          "legacy_completion_score_normalization": "mean_token_score",
+          "legacy_to_correct_trace_ratio": 0.009880641898589365
+        },
+        "forward_calls": 16,
+        "full_prefix_calls": 0,
+        "mu": 2.0,
+        "policy_evaluations": 16,
+        "projected_gradient_coordinates": [
+          0.0005879975506104529,
+          0.00015875912504270673,
+          0.0006313424091786146,
+          1.1573618394322693e-05,
+          -0.00027684244560077786,
+          0.0005942433490417898,
+          0.0008576276013627648,
+          -0.0003685381670948118
+        ],
+        "scored_tokens": 68160,
+        "suffix_calls": 16,
+        "teacher_forced_examples": 256
+      }
+    ]
+  },
+  "frozen_prefix_scoring": {
+    "active": true,
+    "behavior_old_policy": {
+      "forward_calls": 2,
+      "full_prefix_calls": 1,
+      "suffix_calls": 1
+    },
+    "build_full_prefix_calls": 1,
+    "cached_examples": 16,
+    "cached_sequence_length": 560,
+    "counter_scope": "teacher_forced_scoring; autoregressive generation excluded",
+    "exact_backprop_oracle": {
+      "forward_calls": 1,
+      "full_prefix_calls": 0,
+      "suffix_calls": 1
+    },
+    "fallback_reason": null,
+    "finite_difference_probes": {
+      "forward_calls": 64,
+      "full_prefix_calls": 0,
+      "suffix_calls": 64
+    },
+    "frozen_decoder_layers": 24,
+    "replayed_suffix_layers": 4,
+    "requested": true,
+    "total_decoder_layers": 28,
+    "total_teacher_forced_scoring": {
+      "forward_calls": 67,
+      "full_prefix_calls": 1,
+      "suffix_calls": 66
+    }
+  },
+  "integrity": {
+    "attention_matches_requested": true,
+    "model_revision_matches_requested": true,
+    "parameters_unchanged_after_all_probes": true,
+    "requested_prefix_cache_active": true,
+    "source_audit_passed": true
+  },
+  "model": {
+    "adapter_layers": 4,
+    "adapter_names": [
+      "model.layers.24.adapter.core",
+      "model.layers.25.adapter.core",
+      "model.layers.26.adapter.core",
+      "model.layers.27.adapter.core"
+    ],
+    "adapter_parameter_count": 256,
+    "adapter_rank": 8,
+    "attention_matches_requested": true,
+    "device": "cuda",
+    "dtype": "bfloat16",
+    "installed_flash_attn_version": "2.8.3+cu130torch2.13",
+    "name": "Qwen/Qwen2.5-1.5B-Instruct",
+    "requested_attention_implementation": "flash_attention_2",
+    "requested_revision": "989aa7980e4cf806f80c7fef2b1adb7bc71aa306",
+    "resolved_attention_implementation": "flash_attention_2",
+    "resolved_revision": "989aa7980e4cf806f80c7fef2b1adb7bc71aa306",
+    "revision_matches_requested": true
+  },
+  "passed": true,
+  "purpose": "Backprop is used once as a non-updating oracle; the compared production optimizer path remains forward-only.",
+  "random_subspace": {
+    "basis_orthonormality_max_error": 3.398661965192673e-07,
+    "captured_squared_norm_fraction": 0.0329437665979885,
+    "directions": 8,
+    "expected_isotropic_squared_norm_fraction": 0.03125,
+    "full_gradient_l2_norm": 0.008434825755319116,
+    "parameter_count": 256,
+    "projected_gradient_l2_norm": 0.0015309561145147852
+  },
+  "rollout": {
+    "batch_size": 2,
+    "environment_samples": 16,
+    "group_size": 8,
+    "max_new_tokens": 512,
+    "max_prompt_tokens": 256,
+    "numeric_shaping_weight": 0.1,
+    "reward_statistics": {
+      "exact_reward_rate": 0.875,
+      "group_size": 8,
+      "nonzero_reward_fraction": 1.0,
+      "prompt_groups": 2,
+      "reward_max": 1.0,
+      "reward_mean": 0.8804149666102603,
+      "reward_min": 0.0025124792009592056,
+      "reward_std_population": 0.3167210373023878,
+      "samples": 16,
+      "zero_advantage_group_fraction": 0.0,
+      "zero_advantage_groups": 0,
+      "zero_reward_fraction": 0.0
+    },
+    "samples": [
+      {
+        "completions": [
+          {
+            "exact_reward": 1.0,
+            "extracted_answer": "600",
+            "group_index": 0,
+            "response_tokens": 224,
+            "shaped_reward": 1.0,
+            "text": "Let's solve this step by step:\n\n1) First, we need to calculate the total cost of the book set:\n   Cost = $150\n\n2) Then, we find out how much money LaKeisha has already made from mowing:\n   Area:mowed = 3 lawns × (20 ft × 15 ft)\n               = 900 sq.ft.\n\n   Money earned so far = 900 sq.ft. × $0.10/sqft\n                        = $90\n\n3) Now we know that she needs an additional amount:\n   Additional needed = Cost - Amount Earned So Far\n                    = $150 - $90\n                    = $60\n\n4) To figure out how many square feet she needs to cut:\n   Square Feet Needed = Subtraction Result / Rate\n                      = $60 / ($0.10 per square foot)\n\nTherefore, LaKeisha must mow 600 square feet more to earn enough money for the book set. Final answer: 600."
+          },
+          {
+            "exact_reward": 1.0,
+            "extracted_answer": "600",
+            "group_index": 1,
+            "response_tokens": 404,
+            "shaped_reward": 1.0,
+            "text": "To determine how many more square feet LaKeisha needs to mow to earn enough for the book set, we can follow these steps:\n\n1. Calculate the total area of the three lawns she has already mowed.\n2. Determine how much money she has earned from those three lawns.\n3. Find out how much more money she needs in order to reach the cost of the book set.\n\nLet's start by calculating the area of one lawn:\n\\[ \\text{Area of one lawn} = 20 \\text{ ft} \\times 15 \\text{ ft} = 300 \\text{ sq ft} \\]\n\nSince she mowed three lawns, the total area is:\n\\[ \\text{Total area of three lawns} = 3 \\times 300 \\text{ sq ft} = 900 \\text{ sq ft} \\]\n\nNext, we calculate the amount of money she has earned so far:\n\\[ \\text{Earnings per square foot} = \\$0.10 \\]\n\\[ \\text{Earnings from three lawns} = 900 \\text{ sq ft} \\times \\$0.10/\\text{sq ft} = \\$90 \\]\n\nThe cost of the book set is $150, and she has already earned $90, so the additional amount needed is:\n\\[ \\text{Additional earnings required} = \\$150 - \\$90 = \\$60 \\]\n\nFinally, we find out how many more square feet she needs to mow to earn this additional $60:\n\\[ \\text{Number of squares needed} = \\frac{\\$60}{\\$0.10/\\text{sq ft}} = 600 \\text{ sq ft} \\]\n\nSo, LaKeisha needs to mow \\( \\boxed{600} \\) more square feet to earn enough for the book set."
+          },
+          {
+            "exact_reward": 1.0,
+            "extracted_answer": "600",
+            "group_index": 2,
+            "response_tokens": 340,
+            "shaped_reward": 1.0,
+            "text": "To determine how many more square feet LaKeisha needs to mow to earn enough for the book set, we start by calculating the total area of the three lawns she has already mowed.\n\nEach lawn is \\(20 \\times 15\\) square feet:\n\\[\n20 \\times 15 = 300 \\text{ square feet}\n\\]\n\nSince she has mowed three such lawns:\n\\[\n3 \\times 300 = 900 \\text{ square feet}\n\\]\n\nNext, we calculate how much money LaKeisha has earned from mowing these three lawns:\n\\[\n\\text{Charge per square foot} = \\$0.10\n\\]\n\\[\n\\text{Total earnings from mowing three lawns} = 900 \\text{ square feet} \\times 0.10 \\text{ dollars/square foot} = 90 \\text{ dollars}\n\\]\n\nThe cost of the book set is \\( \\$150 \\). To find out how much more money she needs:\n\\[\n\\$150 - \\$90 = \\$60\n\\]\n\nNow, we need to determine how many additional square feet she must mow to earn an extra $60 at her current rate. Since she earns $0.10 per square foot:\n\\[\n\\frac{\\$60}{0.10 \\text{ dollars/square foot}} = 600 \\text{ square feet}\n\\]\n\nThus, LaKeisha needs to mow **600 more square feet** to earn enough money for the book set."
+          },
+          {
+            "exact_reward": 1.0,
+            "extracted_answer": "600",
+            "group_index": 3,
+            "response_tokens": 374,
+            "shaped_reward": 1.0,
+            "text": "To determine how much LaKeisha needs to earn and how many more square feet she needs to mow, follow these steps:\n\n1. **Calculate total cost of the book set:**  \n   \\[\n   \\$150\n   \\]\n\n2. **Determine her current earnings from mowing the lawns:**\n   \n   - Each lawn is \\(20 \\times 15 = 300\\) square feet.\n   - She has mowed three such lawns: \n     \\[\n     3 \\times 300 = 900 \\text{ square feet}\n     \\]\n   - Her charge per square foot is \\(\\$0.10\\).\n     \\[\n     900 \\text{ sq ft} \\times \\$0.10/\\text{sq ft} = \\$90\n     \\]\n\n3. **Find out if she has earned enough yet:**\n   - To cover the full price of the book set:\n     \\[\n     \\$150 > \\$90\n     \\]\n   - Since she has already earned $\\$90$, she still needs:\n     \\[\n     \\$150 - \\$90 = \\$60\n     \\]\n\n4. **Calculate additional square footage required:**\n   - For the remaining amount needed (\\( \\$60 \\)):\n     \\[\n     \\text{Number of additional square feet} = \\frac{\\$60}{\\$0.10/\\text{sq ft}} = 600 \\text{ square feet}\n     \\]\n\n**Conclusion:**\n\nLaKeisha needs to mow an additional 600 square feet to reach her goal of earning enough money to buy the book set.\n\n**Final Answer:**\n\\[ \\boxed{600} \\]"
+          },
+          {
+            "exact_reward": 1.0,
+            "extracted_answer": "600",
+            "group_index": 4,
+            "response_tokens": 362,
+            "shaped_reward": 1.0,
+            "text": "To determine how many more square feet LaKeisha needs to mow to earn enough for the book set, we can follow these steps:\n\n1. **Calculate the total area of the three lawns already mowed:**\n   Each lawn is \\(20 \\times 15\\) square feet.\n   \\[\n   (20 \\times 15) = 300 \\text{ square feet per lawn}\n   \\]\n   Therefore, the total area for three lawns:\n   \\[\n   3 \\times 300 = 900 \\text{ square feet}\n   \\]\n\n2. **Convert the cost of the book set into dollars:**\n   The book set costs $150.\n\n3. **Determine the amount of money LaKeisha has already earned:**\n   She charges $.10 per square foot.\n   \\[\n   900 \\times .10 = 90 \\text{ dollars}\n   \\]\n\n4. **Calculate the remaining amount needed to buy the book set:**\n   Subtract the amount she has already earned from the total cost.\n   \\[\n   150 - 90 = 60 \\text{ dollars}\n   \\]\n\n5. **Find out how many more square feet she needs to mow to earn the remaining amount:**\n   Calculate the number of square feet at her current rate required to reach $60.\n   \\[\n   \\frac{60 \\text{ dollars}}{.10 \\text{ dollars/square foot}} = 600 \\text{ square feet}\n   \\]\n\nTherefore, LaKeisha needs to mow an additional 600 square feet to earn enough to buy the book set."
+          },
+          {
+            "exact_reward": 0.0,
+            "extracted_answer": "141/10",
+            "group_index": 5,
+            "response_tokens": 447,
+            "shaped_reward": 0.0025124792009592056,
+            "text": "To determine how many more square feet LaKeisha needs to mow to earn enough for the book set, we can follow these steps:\n\n1. **Calculate the total area of the three lawns already mowed:**\n   Each lawn measures \\(20 \\times 15\\) square feet.\n   First find the area of one lawn:\n   \\[\n   20 \\times 15 = 300 \\text{ square feet}\n   \\]\n   Since LaKeisha has mowed three such lawns, the total area covered so far is:\n   \\[\n   300 \\times 3 = 900 \\text{ square feet}\n   \\]\n\n2. **Determine the remaining amount needed to buy the book set:**\n   The cost of the book set is $150.\n   We subtract the amount already earned from the total cost to find out how much more she needs:\n   \\[\n   150 - (900 \\div 0.10)\n   \\]\n   \n3. **Convert her rate per square foot into cents and simplify calculations:**\n   Her rate is $0.10 per square foot, which converts to:\n   \\[\n   0.10 \\times 100 = 10 \\text{ cents per square foot}\n   \\]\n   So now calculate the remaining area in terms of cents:\n   \\[\n   150 - (900) / 100 = 150 - 9 = 141 \\text{ cents}\n   \\]\n\n4. **Find an equivalent area that earns this remaining cents:**\n   Since each square foot earns 10 cents, divide her remaining amount by 10:\n   \\[\n   141 \\div 10 = 14.1 \\text{ square feet}\n   \\]\n\nSo, LaKeisha needs to mow approximately **14.1** more square feet to reach her goal, rounding down since partial squares are not possible.\n\nTherefore, the final answer is:\n\\[\n\\boxed{14.1}\n\\]"
+          },
+          {
+            "exact_reward": 1.0,
+            "extracted_answer": "600",
+            "group_index": 6,
+            "response_tokens": 374,
+            "shaped_reward": 1.0,
+            "text": "To determine how many more square feet LaKeisha needs to mow in order to earn enough for the book set, we will follow these steps:\n\n**Step 1:** Calculate LaKeisha's current earnings.\n\n- Her charge per square foot = $0.10\n- Area of each lawn where she has already mowed = \\( 20 \\times 15 = 300 \\) square feet\n\nSince she has mowed three such lawns:\n\\[ 300 \\text{ sq ft/lawn} \\times 3 \\text{ lawns} = 900 \\text{ sq ft} \\]\n\n- Current earnings = \\( 900 \\text{ sq ft} \\times \\$0.10/\\text{sqft} \\)\n\\[ 900 \\times 0.10 = \\$90 \\]\n\n**Step 2:** Determine how much more money LaKeisha needs to reach the cost of the book set ($150).\n\nCost of the book set = $150 \n\nEarnings needed = Cost of the book set - Current earnings\n\\[ \\$150 - \\$90 = \\$60 \\]\n\n**Step 3:** Calculate how many more square feet LaKeisha needs to mow.\n\nTotal amount LaKeisha still needs = $60\nCharge rate = $0.10/sq ft  \nArea that must be mowed = \\( \\frac{\\$60}{\\$0.10/\\text{sq ft}} \\)\n\nTo calculate this division,\n\\[ \\frac{60}{0.10} = 600 \\text{ sq ft} \\]\n\nSo, LaKeisha needs to mow **600 sq ft** more to earn enough for the book set."
+          },
+          {
+            "exact_reward": 1.0,
+            "extracted_answer": "600",
+            "group_index": 7,
+            "response_tokens": 420,
+            "shaped_reward": 1.0,
+            "text": "To solve this problem, let's break it down into steps:\n\n1. **Calculate the total area LaKeisha needs to cover:**\n   - Each lawn is \\(20 \\times 15\\) square feet.\n   - Therefore, one lawn covers:\n     \\[\n     20 \\text{ ft} \\times 15 \\text{ ft} = 300 \\text{ sq ft}\n     \\]\n   \n2. **Determine LaKeisha's earnings from currently mowed lawns:**\n   - She mowed three lawns.\n   - The area per lawn is 300 sq ft.\n   - Earnings per sq ft are $0.10.\n   - Therefore, her earnings so far (from 3 lawns) are:\n     \\[\n     3 \\text{ lawns} \\times 300 \\text{ sq ft/lawn} = 900 \\text{ sq ft}}\n     \n     \n     900 \\text{ sq ft} \\times \\$0.10/\\text{sq ft} = \\$90\n     \n     90 \\text{ dollars}\n     \n3. **Find out how much more money she needs to reach her goal:**\n\n   - Total cost of the book set is $150.\n   - Amount already earned ($90).\n   - Remaining amount needed:\n     \\[\n     \\$150 - \\$90 = \\$60\n     \\]\n\n4. **Calculate the number of additional square feet she needs to mow:**\n\n   To find the number of square feet she needs to mow, divide the remaining amount by the rate per square foot:\n   \\[\n   \\$60 \\div \\$0.10/\\text{sqft} = 600 \\text{ sq ft}\n   \\]\n\n**Conclusion:** \nLaKeisha needs to mow an additional 600 square feet to earn enough money for the book set.\n\n\\(\\boxed{600}\\)"
+          }
+        ],
+        "example_id": "3440e84adca5431e66d0",
+        "question": "LaKeisha is mowing lawns to raise money for a collector set of books. She charges $.10 for every square foot of lawn. The book set costs $150. If she has already mowed three 20 x 15 foot lawns, how many more square feet does she have to mow to earn enough for the book set?",
+        "reference_answer": "600",
+        "source_index": 7341
+      },
+      {
+        "completions": [
+          {
+            "exact_reward": 1.0,
+            "extracted_answer": "52",
+            "group_index": 0,
+            "response_tokens": 162,
+            "shaped_reward": 1.0,
+            "text": "To determine how many spelling badges Celestia has, we start by adding together the number of badges that Hermione and Luna possess:\n\n- Hermione's badges: \\( 14 \\)\n- Luna's badges: \\( 17 \\)\n\nFirst, add these two amounts:\n\\[\n14 + 17 = 31\n\\]\n\nThe total number of badges combined for Hermione, Luna, and Celestia is given as 83. To find out how many badges Celestia has, subtract the sum of Hermione's and Luna's badges from the total number of badges:\n\n\\[\n83 - (14 + 17) = 83 - 31 = 52\n\\]\n\nTherefore, Celestia has **52** spelling badges."
+          },
+          {
+            "exact_reward": 1.0,
+            "extracted_answer": "52",
+            "group_index": 1,
+            "response_tokens": 168,
+            "shaped_reward": 1.0,
+            "text": "To find out how many spelling badges Celestia has, we need to subtract the number of badges that Hermione and Luna have from the total.\n\nFirst, add together the number of badges that Hermione and Luna have:\n- Hermione's badges: 14\n- Luna's badges: 17\n\nTotal badges for Hermione and Luna = 14 + 17 = 31\n\nNow, subtract the total badges of Hermione and Luna from the overall total to find Celestia's badges:\n- Total combinations of badges: 83\n- Combos for Hermione and Luna: 31\n\nCelestia's badges = Total badges - Badges for Hermione and Luna = 83 - 31 = 52\n\nTherefore,\n\\[ \\text{Final answer: } 52 \\]"
+          },
+          {
+            "exact_reward": 1.0,
+            "extracted_answer": "52",
+            "group_index": 2,
+            "response_tokens": 67,
+            "shaped_reward": 1.0,
+            "text": "First find the total number of badges Hermione and Luna have: 14 + 17 = 31\nThen subtract that number from the total number of badges to find the number in Celestia's collection: 83 - 31 = 52\n\nTherefore, the answer is 52."
+          },
+          {
+            "exact_reward": 1.0,
+            "extracted_answer": "52",
+            "group_index": 3,
+            "response_tokens": 148,
+            "shaped_reward": 1.0,
+            "text": "To solve this problem, we need to find out how many spelling badges Celestia has by subtracting the number of badges that Hermione and Luna have from the total number.\n\nHere's the calculation:\n\nCelestia's badges = Total badges - Hermione's badges - Luna's badges\nCelestia's badges = 83 - 14 - 17\n\nLet's perform the subtraction step-by-step:\n\nFirst, subtract Hermione’s badges (14) from the total:\n83 - 14 = 69\n\nThen, subtract Luna’s badges (17) from the result:\n69 - 17 = 52\n\nTherefore, Celestia has **52** spelling badges."
+          },
+          {
+            "exact_reward": 1.0,
+            "extracted_answer": "52",
+            "group_index": 4,
+            "response_tokens": 273,
+            "shaped_reward": 1.0,
+            "text": "To determine how many spelling badges Celestia has, we start by identifying the total number of badges they all have together and subtracting the number of badges that Hermione and Luna possess.\n\nFirst, we note the given information:\n- The total number of spelling badges is 83.\n- Hermione has 14 spelling badges.\n- Luna has 17 spelling badges.\n\nNext, we calculate the combined number of badges Hermione and Luna have:\n\\[\n\\text{Hermione's badges} + \\text{Luna's badges} = 14 + 17\n\\]\n\nAdding these amounts together gives:\n\\[\n14 + 17 = 31\n\\]\n\nNow, to find out how many badges Celestia has, we subtract the sum of Hermione’s and Luna’s badges from the total number of badges:\n\\[\n\\text{Celestia's badges} = \\text{Total badges} - (\\text{Hermione's badges} + \\text{Luna's badges})\n\\]\n\\[\n\\text{Celestia's badges} = 83 - 31\n\\]\n\nPerforming this subtraction yields:\n\\[\n83 - 31 = 52\n\\]\n\nThus, Celestia has \\( \\boxed{52} \\) spelling badges."
+          },
+          {
+            "exact_reward": 0.0,
+            "extracted_answer": "62",
+            "group_index": 5,
+            "response_tokens": 129,
+            "shaped_reward": 0.08412698656320572,
+            "text": "To find out how many spelling badges Celestia has, we need to subtract the number of badges that Hermione and Luna have from the total number of badges.\n\nTotal number of badges = 83\nNumber of badges that Hermione has = 14\nNumber of badges that Luna has = 17\n\nLet's calculate how many badges Celestia has:\n\n\\bbox { Celestia's badges } = \\text{Total badges} - (\\text{Herberta's badges} + \\text{Luna's badges}) \n=\\textbf{62}\n\nCelestia has **62** spelling badges."
+          },
+          {
+            "exact_reward": 1.0,
+            "extracted_answer": "52",
+            "group_index": 6,
+            "response_tokens": 219,
+            "shaped_reward": 1.0,
+            "text": "To find out how many spelling badges Celestia has, we first add up the number of badges that Hermione and Luna each have:\n\n\\[ \\text{Total badges} = \\text{Hermione's badges} + \\text{Luna's badges} + \\text{Celestia's badges} \\]\n\nGiven:\n- Hermione's badges = 14\n- Luna's badges = 17\n\nWe can substitute these values into our equation to calculate Celestia's badges:\n\n\\[ 83 = 14 + 17 + \\text{Celestia's badges} \\]\n\nNow, let’s solve for Celestia’s badges:\n\n\\[ \\text{Celestia's badges} = 83 - (14 + 17) \\]\n\\[ \\text{Celestia's badges} = 83 - 31 \\]\n\\[ \\text{Celestia's badges} = 52 \\]\n\nSo, Celestia has 52 spelling badges. Final answer: **52**."
+          },
+          {
+            "exact_reward": 1.0,
+            "extracted_answer": "52",
+            "group_index": 7,
+            "response_tokens": 149,
+            "shaped_reward": 1.0,
+            "text": "To find out how many spelling badges Celestia has, we can subtract the number of badges that Hermione and Luna have from the total number of badges.\n\nThe calculation is:\n\\[ \\text{Celestia's badges} = \\text{Total badges} - (\\text{Hermione's badges} + \\text{Luna's badges}) \\]\n\\[ \\text{Celestia's badges} = 83 - (14 + 17) \\]\n\\[ \\text{Celestia's badges} = 83 - 31 \\]\n\\[ \\text{Celestia's badges} = 52 \\]\n\nSo, **Celestia has 52 spelling badges**."
+          }
+        ],
+        "example_id": "36c4bc6f373e779b8425",
+        "question": "Hermione, Luna, and Celestia combined have 83 spelling badges. If Hermione has 14 and Luna has 17, how many spelling badges does Celestia have?",
+        "reference_answer": "52",
+        "source_index": 2929
+      }
+    ],
+    "sampling_temperature": 0.8,
+    "valid_response_tokens": 4260
+  },
+  "schema_version": 2,
+  "source_audit": {
+    "passed": true,
+    "source_path": "/home/amodo/rl-no-backward-opt/src/rl_no_backward/sequence_forward_only.py",
+    "violations": []
+  }
+}

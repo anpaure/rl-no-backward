@@ -1,118 +1,172 @@
 # RL Without Backward Passes
 
 Can a small language model learn from reinforcement learning without executing
-a backward pass? This repository compares ordinary reverse-mode GRPO with
-strict inference-only parameter updates on a small, reproducible GSM8K RLVR
-benchmark.
+a backward pass? This repository compares ordinary GRPO against a strict
+inference-only policy optimizer on GSM8K.
 
-The primary backward-free method samples each rollout group once, symmetrically
-perturbs a tiny adapter, rescoring the *same stored completions* under each
-perturbed policy, reconstructs a projected policy gradient and token-level
-empirical Fisher matrix, then takes a KL-constrained natural-gradient step.
-Rewards and environment interaction are never repeated for the directional
-probes.
+## Head-to-head contract
 
-## Experiment
+The corrected comparison uses the same policy and evidence on both sides:
 
-- **Model:** `Qwen/Qwen2.5-1.5B-Instruct`, frozen in BF16.
-- **Adapter:** four activation-PCA residual cores in the last four blocks,
-  rank 8; only 256 scalars are trainable.
-- **Task:** full-difficulty GSM8K with deterministic final-number checking.
-  The training reward is exact match plus at most 0.1 bounded numeric-proximity
-  shaping; exact match remains the reported metric.
-- **Data/budget:** 512 official-train examples, 96 disjoint validation examples,
-  and 300 optimizer steps (4,800 sampled responses per trained run). A fresh
-  256-example official-test subset is evaluated only after a checkpoint is
-  selected by validation accuracy; all pilot-test IDs are excluded.
-- **Methods:** frozen base, BP-GRPO on the same adapter, forward-only projected
-  PG, forward-only natural PG, and a history-subspace NPG heuristic.
-- **Fairness:** identical adapter initialization, examples, prompt schedule,
-  rollout seeds, group size, verifier, and validation selection rule.
+- **Model:** pinned `Qwen/Qwen2.5-1.5B-Instruct`, with the BF16 base frozen.
+- **Policy parameters:** standard PEFT LoRA on `q_proj` and `v_proj` in all 28
+  transformer blocks, rank 8 and alpha 16: exactly **1,089,536** FP32 trainable
+  scalars.
+- **Task:** full-difficulty GSM8K with deterministic exact numeric-match reward.
+- **Rollouts:** vLLM 0.22, FlashAttention-2, one shared prompt schedule, seeds,
+  temperatures, group size, response budget, and versioned LoRA state.
+- **Evaluation:** one committed 256-example development partition selected from
+  previously untouched official-test IDs. A separate 679-example final
+  partition remains locked until methods and hyperparameters are frozen.
+- **BP-GRPO:** reverse-mode AdamW on the standard clipped, token-local GRPO
+  objective. The fixed-rollout loss and gradient are differentially checked
+  against pinned upstream TRL 1.10.
+- **FO-NPG:** the same LoRA tensors and fixed-rollout objective, but policy
+  derivatives and Fisher coordinates come from symmetric teacher-forced
+  inference at `a + mu*v` and `a - mu*v`; a KL-constrained line search applies
+  the update. No reverse-mode operation is allowed in its training process.
 
-The history-subspace method is deliberately labeled as a heuristic. It is not
-the document's full independent cross-sketch covariance estimator. FO-NPG is
-the primary backward-free comparison.
+The first required result is a short integration and learning gate. The longer
+multi-seed sweep is launched only after normal GRPO demonstrably changes the
+policy and improves the predeclared learning metric, the forward-only
+finite-difference coordinates agree with an exact diagnostic gradient, and
+both methods reproduce the same initial rollout.
 
-## Why not difference rewards directly?
+An optional, non-headline `fo_focus_npg` ablation keeps the identical q=8
+forward-only budget while replacing the isotropic search basis with an
+approximate finite-scale cross-sketch FOCUS heuristic: a B-only standard-LoRA
+bootstrap followed by disjoint A4/B4 probes guided by rank-two state. The state
+is updated from deterministically disjoint prompt halves using the probe token
+scores already in memory, so it adds no policy evaluations and persists even
+when a line-search proposal is rejected. Because production uses finite-radius
+BF16 policy differences, this state is not presented as an unbiased covariance
+estimator. The primary final config remains exactly base/BP-GRPO/FO-NPG; the
+100-step observe-only ablation is
+`configs/gsm8k_matched_lora_focus_ablation.yaml`.
+
+## Why rescore stored trajectories?
 
 Return-difference evolution strategies must regenerate rollouts for every
-positive/negative perturbation, and their noise scales poorly as the probe
-radius shrinks. Here, each response and reward is sampled once. Ordinary
-teacher-forced inference provides the directional action-log-probability score
-needed by the policy-gradient identity.
-
-For a search basis \(V=[v_1,\ldots,v_q]\), the implementation estimates
+positive/negative perturbation. Here each response and verifier reward is
+sampled once. For a search basis `V=[v_1,...,v_q]`, ordinary teacher-forced
+inference estimates directional token scores
 
 \[
 z_{igtj}=\frac{\log\pi_{a+\mu v_j}(y_{igt}\mid s_{igt})-
-\log\pi_{a-\mu v_j}(y_{igt}\mid s_{igt})}{2\mu},
+\log\pi_{a-\mu v_j}(y_{igt}\mid s_{igt})}{2\mu}.
 \]
 
-then forms a length-normalized projected gradient and the token-level Fisher
-that matches the constrained KL geometry:
+Those scores provide projected GRPO derivatives and a small token-local Fisher
+matrix. FO-NPG solves the damped projected natural-gradient system and accepts
+an update only when the fixed-rollout surrogate and empirical KL satisfy the
+locked line-search rules. Directional probes repeat neither generation nor
+reward evaluation.
 
-\[
-g_V=\frac1{BG}\sum_{ig}A_{ig}\frac1{T_{ig}}\sum_t z_{igt},\qquad
-F_V=\frac1{BG}\sum_{ig}\frac1{T_{ig}}\sum_t z_{igt}z_{igt}^{\top}.
-\]
+vLLM sampler probabilities and Hugging Face policy probabilities are kept
+separate. The PPO denominator is the frozen Hugging Face old policy, while the
+detached `pi_old_HF / q_vLLM` term only corrects inference-engine mismatch.
+This mirrors the pinned TRL contract and prevents backend numerical differences
+from masquerading as a policy update.
 
-FO-NPG solves \((F_V+\lambda I)u=g_V\), proposes
-\(\Delta a=\alpha Vu\), and uses inference-only line search to enforce the KL
-budget and improve the stored-rollout clipped surrogate.
+## Current evidence
 
-## Reproduce
+Two earlier experiment families are retained under `artifacts/` for
+reproducibility, but are **not headline efficacy results**:
 
-The project is locked with `uv.lock` and all published training was executed on
-one NVIDIA H100 PCIe.
+- `pilot_residual_core_v3/` contains long H100 runs over a custom 256-scalar
+  residual-core policy. Those runs established vLLM/FlashAttention throughput,
+  rollout provenance, zero backward calls, and memory/timing instrumentation,
+  but they are not normal LoRA GRPO and used an incorrect old-policy denominator.
+- `reference_trl_lora_overfit25/` is a genuine upstream-TRL all-layer LoRA
+  engineering run. It verifies the 1,089,536-parameter layout and that the
+  optimizer moves it, but it did not improve its small validation set and did
+  not use the final matched rollout/evaluation protocol.
+
+No final BP-versus-FO efficacy claim is made until the corrected matched sweep
+passes its gates and the locked final partition is evaluated once.
+
+### ChipWhisperer optimizer capture
+
+The repository also contains a matched, descriptive n=1 hardware capture of
+one BP-GRPO update and one backward-free FO-NPG update. Both updates use the
+same initialization and 32 frozen responses. A ChipWhisperer Husky Plus records
+the external AC-coupled power proxy in true-stream mode while timestamped NVML
+provides the auxiliary watt measurements.
+
+In this capture, BP-GRPO took 1.033 s and 193.7 J of raw NVML energy; FO-NPG
+took 5.226 s and 1,657.6 J. The backward-free update executed zero backward
+calls, but its q=8 two-sided probes and line search required 19 logical policy
+evaluations, making it 5.06x slower and 8.56x higher-energy for this update.
+These are single traces without a repeat-based uncertainty interval, not a
+population estimate. See the [capture report](artifacts/matched_lora_power_trace/README.md),
+[plot](artifacts/matched_lora_power_trace/figures/power_trace_comparison.png),
+and raw SideCapture stores under `artifacts/matched_lora_power_trace/`.
+
+## H100 setup
+
+The project uses `uv`. FlashAttention is installed from the requested
+checksum-pinned prebuilt wheel and is never compiled from source.
 
 ```bash
 git clone https://github.com/anpaure/rl-no-backward.git
 cd rl-no-backward
+./scripts/install_standard_grpo_h100.sh
+```
+
+The installer pins Torch 2.11/cu130, Transformers 5.15, vLLM 0.22, TRL 1.10,
+PEFT 0.20, and FlashAttention 2.8.3. Run local tests with:
+
+```bash
 uv sync --extra dev
 uv run pytest -q
-uv run rl-no-backward gsm8k \
-  --config configs/gsm8k_final.yaml \
-  --output artifacts/final_gsm8k
-uv run python -m rl_no_backward.plotting \
-  artifacts/final_gsm8k artifacts/figures
+uv run ruff check .
 ```
 
-On an H100 host that already provides a compatible CUDA PyTorch build, a
-system-site-packages environment avoids downloading another multi-gigabyte
-wheel:
+Print or run the matched learning gate:
 
 ```bash
-uv venv --system-site-packages --python /usr/bin/python3
-uv pip install 'transformers>=4.48,<6' 'datasets>=3,<5' \
-  'matplotlib>=3.9' 'wandb>=0.19,<1' 'pytest>=8' 'ruff>=0.9'
-uv pip install --no-deps -e .
+PYTHONPATH=src .venv-standard-grpo/bin/python \
+  -m rl_no_backward.matched_lora_runner \
+  --config configs/gsm8k_matched_lora_overfit_gate.yaml \
+  --print-plan
+
+PYTHONPATH=src .venv-standard-grpo/bin/python \
+  -m rl_no_backward.matched_lora_runner \
+  --config configs/gsm8k_matched_lora_overfit_gate.yaml \
+  --output /path/outside/the/checkout/matched-lora-gate
 ```
 
-Run the real-model numerical audit separately:
+Each method/seed runs in a fresh Python process. Raw JSONL, W&B offline runs,
+selected LoRA checkpoints, sampled completions, immutable data/schedule/state
+receipts, and validation results are written below the output directory.
+
+## Plots and W&B
+
+Append-only JSONL is the plotting source of truth. Matplotlib writes PNG and
+PDF learning curves, selected-checkpoint performance, compute/memory tradeoffs,
+and optimizer diagnostics:
 
 ```bash
-uv run python -m rl_no_backward.gsm8k_diagnostics \
-  --output artifacts/diagnostics/gsm8k_fd.json --max-tokens 512 --directions 8
+PYTHONPATH=src .venv-standard-grpo/bin/python \
+  -m rl_no_backward.plotting /path/to/results/raw artifacts/figures
 ```
 
-## W&B and raw evidence
-
-Every method/seed logs metrics and a run-data artifact through W&B. Configs use
-offline mode by default so credentials are never assumed on a shared machine.
-After authenticating to the intended entity, upload them with:
+W&B defaults to offline mode on the shared H100. After authenticating to the
+intended entity, runs can be uploaded without rerunning training:
 
 ```bash
-wandb sync artifacts/final_gsm8k/wandb/offline-run-*
+wandb sync /path/to/results/wandb/offline-run-*
 ```
 
-Append-only JSONL is the plotting source of truth, so all figures can be
-regenerated without W&B. The final report and measured results are in
-[`REPORT.md`](REPORT.md) and `artifacts/figures/` once the locked sweep is
-complete.
+The final measured tables and interpretation will replace the clearly marked
+pending sections in [`REPORT.md`](REPORT.md) after the matched multi-seed run.
 
 ## Scope
 
-This is a small-model feasibility study, not evidence that forward-only RL is
-competitive for frontier-scale reasoning post-training. It isolates optimizer
-behavior under a severe 256-parameter adapter bottleneck and reports sample,
-compute, time, memory, KL, estimator, and reward diagnostics explicitly.
+This is a small-model feasibility study. A no-backward method may reduce
+activation memory and fit inference-only infrastructure, but with `q`
+two-sided directions it generally performs many more forward evaluations than
+reverse-mode GRPO. The experiment therefore reports reward, exact accuracy,
+environment samples, scored tokens, synchronized wall time (including LoRA
+sync), peak memory, KL, update acceptance, and estimator fidelity rather than
+assuming forward-only is faster.
