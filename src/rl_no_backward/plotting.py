@@ -376,6 +376,22 @@ def _canonical_record(raw: Mapping[str, Any], path: Path, line_number: int) -> d
                     "runtime_seconds",
                 ),
             ),
+            "rollout_and_old_score_seconds": _find_number(
+                flat,
+                (
+                    "rollout_and_old_score_seconds",
+                    "rollout_old_score_seconds",
+                    "rollout_seconds",
+                ),
+            ),
+            "optimizer_seconds": _find_number(
+                flat,
+                ("optimizer_seconds", "optimiser_seconds", "optimization_seconds"),
+            ),
+            "evaluation_seconds": _find_number(
+                flat,
+                ("evaluation_seconds", "eval_seconds", "validation_seconds"),
+            ),
             "forward_calls": _find_number(
                 flat,
                 (
@@ -384,6 +400,18 @@ def _canonical_record(raw: Mapping[str, Any], path: Path, line_number: int) -> d
                     "forward_calls",
                     "model_forward_calls",
                 ),
+            ),
+            "full_prefix_calls": _find_number(
+                flat,
+                (
+                    "cumulative_full_prefix_calls",
+                    "total_full_prefix_calls",
+                    "full_prefix_calls",
+                ),
+            ),
+            "suffix_calls": _find_number(
+                flat,
+                ("cumulative_suffix_calls", "total_suffix_calls", "suffix_calls"),
             ),
             "backward_calls": _find_number(
                 flat,
@@ -406,10 +434,28 @@ def _canonical_record(raw: Mapping[str, Any], path: Path, line_number: int) -> d
             "peak_gpu_memory_bytes": _find_number(
                 flat,
                 (
+                    "peak_gpu_memory_allocated_bytes",
                     "peak_gpu_memory_bytes",
                     "max_gpu_memory_bytes",
                     "peak_memory_bytes",
                     "cuda_peak_memory_bytes",
+                ),
+            ),
+            "peak_gpu_memory_allocated_bytes": _find_number(
+                flat,
+                (
+                    "peak_gpu_memory_allocated_bytes",
+                    "peak_gpu_memory_bytes",
+                    "max_gpu_memory_allocated_bytes",
+                    "cuda_peak_memory_allocated_bytes",
+                ),
+            ),
+            "peak_gpu_memory_reserved_bytes": _find_number(
+                flat,
+                (
+                    "peak_gpu_memory_reserved_bytes",
+                    "max_gpu_memory_reserved_bytes",
+                    "cuda_peak_memory_reserved_bytes",
                 ),
             ),
             "accuracy": accuracy,
@@ -486,10 +532,17 @@ def load_results(input_dir: str | Path) -> pd.DataFrame:
         "step",
         "environment_samples",
         "wall_time_seconds",
+        "rollout_and_old_score_seconds",
+        "optimizer_seconds",
+        "evaluation_seconds",
         "forward_calls",
+        "full_prefix_calls",
+        "suffix_calls",
         "backward_calls",
         "teacher_forced_examples",
         "peak_gpu_memory_bytes",
+        "peak_gpu_memory_allocated_bytes",
+        "peak_gpu_memory_reserved_bytes",
         "accuracy",
         "expected_reward",
         "score",
@@ -643,6 +696,22 @@ def _last_finite(group: pd.DataFrame, column: str) -> float:
     return float(values.iloc[-1]) if not values.empty else float("nan")
 
 
+def _sum_finite(group: pd.DataFrame, column: str) -> float:
+    if column not in group:
+        return float("nan")
+    values = pd.to_numeric(group[column], errors="coerce")
+    values = values[np.isfinite(values)]
+    return float(values.sum()) if not values.empty else float("nan")
+
+
+def _max_finite(group: pd.DataFrame, column: str) -> float:
+    if column not in group:
+        return float("nan")
+    values = pd.to_numeric(group[column], errors="coerce")
+    values = values[np.isfinite(values)]
+    return float(values.max()) if not values.empty else float("nan")
+
+
 def _per_run_summary(frame: pd.DataFrame) -> pd.DataFrame:
     rows: list[dict[str, Any]] = []
     for run_id, group in frame.groupby("run_id", sort=True):
@@ -677,10 +746,21 @@ def _per_run_summary(frame: pd.DataFrame) -> pd.DataFrame:
             "final_environment_samples": _last_finite(group, "environment_samples"),
             "final_wall_time_seconds": _last_finite(group, "wall_time_seconds"),
             "final_forward_calls": _last_finite(group, "forward_calls"),
+            "final_full_prefix_calls": _last_finite(group, "full_prefix_calls"),
+            "final_suffix_calls": _last_finite(group, "suffix_calls"),
             "final_backward_calls": _last_finite(group, "backward_calls"),
             "final_teacher_forced_examples": _last_finite(group, "teacher_forced_examples"),
-            "peak_gpu_memory_bytes": float(
-                pd.to_numeric(group["peak_gpu_memory_bytes"], errors="coerce").max()
+            "total_rollout_and_old_score_seconds": _sum_finite(
+                training, "rollout_and_old_score_seconds"
+            ),
+            "total_optimizer_seconds": _sum_finite(training, "optimizer_seconds"),
+            "total_evaluation_seconds": _sum_finite(evaluations, "evaluation_seconds"),
+            "peak_gpu_memory_bytes": _max_finite(group, "peak_gpu_memory_bytes"),
+            "peak_gpu_memory_allocated_bytes": _max_finite(
+                group, "peak_gpu_memory_allocated_bytes"
+            ),
+            "peak_gpu_memory_reserved_bytes": _max_finite(
+                group, "peak_gpu_memory_reserved_bytes"
             ),
             "acceptance_rate": float(
                 pd.to_numeric(training["acceptance_rate"], errors="coerce").mean()
@@ -739,9 +819,16 @@ def summarize_results(
         "final_environment_samples",
         "final_wall_time_seconds",
         "final_forward_calls",
+        "final_full_prefix_calls",
+        "final_suffix_calls",
         "final_backward_calls",
         "final_teacher_forced_examples",
+        "total_rollout_and_old_score_seconds",
+        "total_optimizer_seconds",
+        "total_evaluation_seconds",
         "peak_gpu_memory_bytes",
+        "peak_gpu_memory_allocated_bytes",
+        "peak_gpu_memory_reserved_bytes",
         "acceptance_rate",
     )
     for method, group in run_summary.groupby("method", sort=False):
@@ -1167,13 +1254,30 @@ def _plot_compute_memory(
     methods = _ordered_methods(summary["method"])
     styles = _method_styles(methods)
     indexed = summary.set_index("method")
-    specifications = (
+    has_phase_timing = (
+        "total_optimizer_seconds_mean" in summary
+        and summary["total_optimizer_seconds_mean"].notna().any()
+    )
+    compute_specification = (
         (
-            "final_forward_calls_mean",
-            "Teacher-forced microbatch calls\n(rollout/eval excluded)",
+            "total_optimizer_seconds_mean",
+            "Synchronized optimizer time (seconds)",
             1.0,
+        )
+        if has_phase_timing
+        else (
+            "final_scored_tokens_mean",
+            "Logical teacher-forced response tokens",
+            1.0,
+        )
+    )
+    specifications = (
+        compute_specification,
+        (
+            "peak_gpu_memory_allocated_bytes_mean",
+            "HF trainer peak allocated memory (GiB)\n(vLLM worker excluded)",
+            2**30,
         ),
-        ("peak_gpu_memory_bytes_mean", "Peak allocated GPU memory (GiB)", 2**30),
     )
     score_values: list[float] = []
     for ax, (x_column, x_label, divisor) in zip(axes, specifications, strict=True):
@@ -1205,11 +1309,11 @@ def _plot_compute_memory(
             plotted = True
         ax.set_xlabel(x_label)
         ax.set_title(
-            "Compute efficiency" if "forward" in x_column else "Memory efficiency",
+            "Optimizer efficiency" if "memory" not in x_column else "Memory footprint",
             loc="left",
             fontweight="bold",
         )
-        if "forward" in x_column:
+        if "memory" not in x_column:
             ax.xaxis.set_major_formatter(EngFormatter(sep=""))
         if not plotted:
             _empty_panel(ax, f"No {x_label.lower()} telemetry")

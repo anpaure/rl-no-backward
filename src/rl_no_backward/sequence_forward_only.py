@@ -23,6 +23,7 @@ from .model import (
     set_adapter_grad_enabled,
     set_parameter_vector,
 )
+from .sequence_fastpath import FusedProbeConfig, fused_directional_token_log_probs
 from .sequence_policy import (
     ProjectedScoreStatistics,
     SequenceRolloutBatch,
@@ -52,6 +53,9 @@ class ForwardSequenceConfig:
     history_size: int = 16
     length_normalize_scores: bool = True
     scoring_micro_batch_size: int | None = None
+    use_fused_probes: bool = False
+    fused_probe_directions_per_forward: int = 2
+    fused_probe_examples_per_forward: int = 4
 
     def __post_init__(self) -> None:
         if self.method not in {"fo_pg", "fo_npg", "focus_npg"}:
@@ -91,6 +95,17 @@ class ForwardSequenceConfig:
             raise ValueError("minimum_surrogate_improvement must be finite")
         if not isinstance(self.length_normalize_scores, bool):
             raise TypeError("length_normalize_scores must be boolean")
+        if not isinstance(self.use_fused_probes, bool):
+            raise TypeError("use_fused_probes must be boolean")
+        for name, value in (
+            (
+                "fused_probe_directions_per_forward",
+                self.fused_probe_directions_per_forward,
+            ),
+            ("fused_probe_examples_per_forward", self.fused_probe_examples_per_forward),
+        ):
+            if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+                raise ValueError(f"{name} must be a positive integer")
         if self.scoring_micro_batch_size is not None and (
             isinstance(self.scoring_micro_batch_size, bool)
             or not isinstance(self.scoring_micro_batch_size, int)
@@ -117,6 +132,8 @@ class ForwardSequenceStepResult:
     teacher_forced_examples: int
     scored_tokens: int
     derivative_variance: float
+    full_prefix_calls: int = 0
+    suffix_calls: int = 0
 
 
 class SequenceActiveSubspace:
@@ -176,6 +193,7 @@ def directional_sequence_score_statistics(
     *,
     length_normalize: bool = True,
     scoring_micro_batch_size: int | None = None,
+    fused_probe_config: FusedProbeConfig | None = None,
 ) -> tuple[ProjectedScoreStatistics, int]:
     """Symmetrically probe fixed response log probabilities in every basis direction."""
 
@@ -183,6 +201,68 @@ def directional_sequence_score_statistics(
         raise ValueError("basis must have shape [parameter_count, directions>=1]")
     if finite_difference_mu <= 0 or not math.isfinite(finite_difference_mu):
         raise ValueError("finite_difference_mu must be positive and finite")
+    statistics, policy_evaluations, _, _, _ = _directional_sequence_score_statistics_with_counts(
+        bundle,
+        rollout,
+        center,
+        basis,
+        finite_difference_mu,
+        length_normalize=length_normalize,
+        scoring_micro_batch_size=scoring_micro_batch_size,
+        fused_probe_config=fused_probe_config,
+    )
+    return statistics, policy_evaluations
+
+
+@torch.inference_mode()
+def _directional_sequence_score_statistics_with_counts(
+    bundle: ModelBundle,
+    rollout: SequenceRolloutBatch,
+    center: Tensor,
+    basis: Tensor,
+    finite_difference_mu: float,
+    *,
+    length_normalize: bool,
+    scoring_micro_batch_size: int | None,
+    fused_probe_config: FusedProbeConfig | None,
+) -> tuple[ProjectedScoreStatistics, int, int, int, int]:
+    """Return projected statistics plus logical evaluations and model calls."""
+
+    if basis.ndim != 2 or basis.shape[0] != center.numel() or basis.shape[1] == 0:
+        raise ValueError("basis must have shape [parameter_count, directions>=1]")
+    if finite_difference_mu <= 0 or not math.isfinite(finite_difference_mu):
+        raise ValueError("finite_difference_mu must be positive and finite")
+
+    policy_evaluations = 2 * basis.shape[1]
+    if fused_probe_config is not None:
+        try:
+            fused = fused_directional_token_log_probs(
+                bundle,
+                rollout,
+                center,
+                basis,
+                finite_difference_mu,
+                fused_probe_config,
+            )
+        finally:
+            # Match the scalar implementation's public postcondition even
+            # when a caller supplied a center different from the live policy.
+            set_parameter_vector(bundle, center)
+        statistics = central_difference_score_statistics(
+            fused.positive_token_log_probs,
+            fused.negative_token_log_probs,
+            rollout,
+            finite_difference_mu,
+            length_normalize=length_normalize,
+        )
+        return (
+            statistics,
+            policy_evaluations,
+            fused.model_calls,
+            fused.full_prefix_calls,
+            fused.suffix_calls,
+        )
+
     positive: list[Tensor] = []
     negative: list[Tensor] = []
     try:
@@ -214,7 +294,12 @@ def directional_sequence_score_statistics(
         finite_difference_mu,
         length_normalize=length_normalize,
     )
-    return statistics, 2 * basis.shape[1]
+    model_calls = policy_evaluations * _micro_batches_per_evaluation(
+        rollout, scoring_micro_batch_size
+    )
+    if rollout.frozen_prefix_cache is None:
+        return statistics, policy_evaluations, model_calls, model_calls, model_calls
+    return statistics, policy_evaluations, model_calls, 0, model_calls
 
 
 @torch.inference_mode()
@@ -335,7 +420,19 @@ def forward_sequence_step(
         bundle.device,
         active_basis=active_basis,
     )
-    statistics, probe_evaluations = directional_sequence_score_statistics(
+    fused_probe_config = None
+    if config.use_fused_probes:
+        fused_probe_config = FusedProbeConfig(
+            directions_per_forward=config.fused_probe_directions_per_forward,
+            examples_per_forward=config.fused_probe_examples_per_forward,
+        )
+    (
+        statistics,
+        probe_evaluations,
+        probe_forward_calls,
+        probe_full_prefix_calls,
+        probe_suffix_calls,
+    ) = _directional_sequence_score_statistics_with_counts(
         bundle,
         rollout,
         center,
@@ -343,6 +440,7 @@ def forward_sequence_step(
         config.finite_difference_mu,
         length_normalize=config.length_normalize_scores,
         scoring_micro_batch_size=config.scoring_micro_batch_size,
+        fused_probe_config=fused_probe_config,
     )
     coordinates = _solve_projected_coordinates(statistics.gradient, statistics.fisher, config)
     parameter_direction = basis @ coordinates
@@ -380,9 +478,16 @@ def forward_sequence_step(
     )
     derivative_variance = float(weighted_scores.var(dim=0, unbiased=False).mean().item())
     policy_evaluations = probe_evaluations + search_evaluations
-    forward_calls = policy_evaluations * _micro_batches_per_evaluation(
+    search_forward_calls = search_evaluations * _micro_batches_per_evaluation(
         rollout, config.scoring_micro_batch_size
     )
+    forward_calls = probe_forward_calls + search_forward_calls
+    if rollout.frozen_prefix_cache is None:
+        full_prefix_calls = probe_full_prefix_calls + search_forward_calls
+        suffix_calls = probe_suffix_calls + search_forward_calls
+    else:
+        full_prefix_calls = probe_full_prefix_calls
+        suffix_calls = probe_suffix_calls + search_forward_calls
     final_parameters = parameter_vector(bundle).float()
     actual_step_norm = float((final_parameters - center).norm().item())
     if not accepted:
@@ -404,6 +509,8 @@ def forward_sequence_step(
         teacher_forced_examples=policy_evaluations * rollout.environment_samples,
         scored_tokens=policy_evaluations * rollout.valid_response_tokens,
         derivative_variance=derivative_variance,
+        full_prefix_calls=full_prefix_calls,
+        suffix_calls=suffix_calls,
     )
 
 

@@ -1,0 +1,23 @@
+2026-08-18 14:12:59,520 INFO    MainThread:2954478 [wandb_setup.py:_flush():81] Current SDK version is 0.28.2
+2026-08-18 14:12:59,520 INFO    MainThread:2954478 [wandb_setup.py:_flush():81] Configure stats pid to 2954478
+2026-08-18 14:12:59,520 INFO    MainThread:2954478 [wandb_setup.py:_flush():81] Loading settings from environment variables
+2026-08-18 14:12:59,520 INFO    MainThread:2954478 [wandb_init.py:setup_run_log_directory():739] Logging user logs to artifacts/final_gsm8k/wandb/offline-run-20260818_141259-t99vfbm9/logs/debug.log
+2026-08-18 14:12:59,520 INFO    MainThread:2954478 [wandb_init.py:setup_run_log_directory():740] Logging internal logs to artifacts/final_gsm8k/wandb/offline-run-20260818_141259-t99vfbm9/logs/debug-internal.log
+2026-08-18 14:12:59,520 INFO    MainThread:2954478 [wandb_init.py:init():783] calling init triggers
+2026-08-18 14:12:59,520 INFO    MainThread:2954478 [wandb_init.py:init():788] wandb.init called with sweep_config: {}
+config: {'model_name': 'Qwen/Qwen2.5-1.5B-Instruct', 'model_revision': '989aa7980e4cf806f80c7fef2b1adb7bc71aa306', 'dataset_revision': '740312add88f781978c0658806c59bc2815b9866', 'dtype': 'bfloat16', 'device': 'cuda', 'adapter_rank': 8, 'adapter_layers': 4, 'adapter_scale': 1.0, 'train_size': 512, 'val_size': 96, 'test_size': 256, 'run_test_evaluation': True, 'test_exclusion_metadata': 'artifacts/pilot_gsm8k_1p5b/metadata.json', 'subset_seed': 314159, 'min_reasoning_lines': 0, 'max_reasoning_lines': 1000, 'max_answer_magnitude': 1000000000000000000, 'methods': ['base', 'bp_grpo', 'fo_pg', 'fo_npg', 'focus_npg'], 'seeds': [0, 1, 2], 'steps': 300, 'batch_size': 2, 'group_size': 8, 'max_prompt_tokens': 256, 'max_new_tokens': 512, 'sampling_temperature': 0.8, 'scoring_micro_batch_size': 4, 'eval_interval': 50, 'eval_batch_size': 8, 'numeric_shaping_weight': 0.1, 'calibration_examples': 64, 'wandb_project': 'rl-no-backward', 'wandb_entity': None, 'wandb_mode': 'offline', 'backprop': {'learning_rate': 0.001, 'epochs_per_rollout': 1, 'clip_epsilon': 0.2, 'max_grad_norm': 1.0, 'scoring_micro_batch_size': 4}, 'forward': {'directions': 8, 'finite_difference_mu': 2.0, 'fisher_damping': 0.2, 'kl_budget': 0.001, 'clip_epsilon': 0.2, 'max_step_norm': 0.15, 'line_search_steps': 10, 'active_rank': 4, 'history_size': 12, 'scoring_micro_batch_size': 4}, 'method': 'base', 'seed': 0, '_wandb': {}}
+2026-08-18 14:12:59,520 INFO    MainThread:2954478 [wandb_init.py:init():831] starting backend
+2026-08-18 14:12:59,735 INFO    MainThread:2954478 [wandb_init.py:init():846] sending inform_init request
+2026-08-18 14:12:59,861 INFO    MainThread:2954478 [wandb_init.py:init():851] backend started and connected
+2026-08-18 14:12:59,863 INFO    MainThread:2954478 [wandb_init.py:init():921] updated telemetry
+2026-08-18 14:12:59,870 INFO    MainThread:2954478 [wandb_init.py:init():944] communicating run to backend with 90.0 second timeout
+2026-08-18 14:12:59,876 INFO    MainThread:2954478 [wandb_init.py:init():981] starting run threads in backend
+2026-08-18 14:12:59,988 INFO    MainThread:2954478 [wandb_run.py:_console_start():2626] atexit reg
+2026-08-18 14:12:59,989 INFO    MainThread:2954478 [wandb_run.py:_redirect():2476] redirect: wrap_raw
+2026-08-18 14:12:59,989 INFO    MainThread:2954478 [wandb_run.py:_redirect():2545] Wrapping output streams.
+2026-08-18 14:12:59,989 INFO    MainThread:2954478 [wandb_run.py:_redirect():2568] Redirects installed.
+2026-08-18 14:12:59,990 INFO    MainThread:2954478 [wandb_init.py:init():1019] run started, returning control to user process
+2026-08-18 14:16:55,676 INFO    MainThread:2954478 [wandb_run.py:_finish():2397] finishing run rl-no-backward/t99vfbm9
+2026-08-18 14:16:55,676 INFO    MainThread:2954478 [wandb_run.py:_atexit_cleanup():2593] got exitcode: 0
+2026-08-18 14:16:55,676 INFO    MainThread:2954478 [wandb_run.py:_restore():2575] restore
+2026-08-18 14:16:55,676 INFO    MainThread:2954478 [wandb_run.py:_restore():2581] restore done

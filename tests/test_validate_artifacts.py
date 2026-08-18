@@ -1,0 +1,348 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+import pytest
+import yaml
+
+from rl_no_backward.validate_artifacts import main, validate_benchmark_artifacts
+
+
+def _config() -> dict[str, Any]:
+    return {
+        "model_name": "Qwen/Qwen2.5-Math-7B-Instruct",
+        "methods": ["base", "bp_grpo", "fo_npg"],
+        "seeds": [0, 1],
+        "steps": 4,
+        "batch_size": 2,
+        "group_size": 3,
+        "eval_interval": 2,
+        "run_test_evaluation": True,
+        "test_size": 3,
+        "wandb_mode": "offline",
+    }
+
+
+def _evaluation(
+    method: str,
+    seed: int,
+    step: int,
+    *,
+    environment_samples: int,
+    forward_calls: int,
+    backward_calls: int,
+    split: str | None = None,
+) -> dict[str, Any]:
+    record: dict[str, Any] = {
+        "kind": "evaluation",
+        "method": method,
+        "seed": seed,
+        "step": step,
+        "wall_time_seconds": float(step * 10),
+        "environment_samples": environment_samples,
+        "generated_tokens": environment_samples * 5,
+        "scored_tokens": environment_samples * (18 if method == "fo_npg" else 10),
+        "forward_calls": forward_calls,
+        "full_prefix_calls": forward_calls,
+        "suffix_calls": forward_calls,
+        "backward_calls": backward_calls,
+        "peak_gpu_memory_bytes": 1024 + step,
+        "peak_gpu_memory_allocated_bytes": 1024 + step,
+        "peak_gpu_memory_reserved_bytes": 2048 + step,
+        "evaluation_seconds": 1.0,
+        "val_accuracy": 0.25 + 0.01 * step,
+    }
+    if split is not None:
+        record.update(
+            {
+                "split": split,
+                "selected_step": 0 if method == "base" else 2,
+                "selection_val_accuracy": 0.27,
+                "test_accuracy": 0.3,
+            }
+        )
+    return record
+
+
+def _records(method: str, seed: int, config: dict[str, Any]) -> list[dict[str, Any]]:
+    is_base = method == "base"
+    is_forward = method == "fo_npg"
+    records = [
+        _evaluation(
+            method,
+            seed,
+            0,
+            environment_samples=0,
+            forward_calls=0,
+            backward_calls=0,
+        )
+    ]
+    if not is_base:
+        samples_per_step = config["batch_size"] * config["group_size"]
+        for step in range(1, config["steps"] + 1):
+            backward_calls = 0 if is_forward else step
+            forward_calls = step * (8 if is_forward else 3)
+            environment_samples = step * samples_per_step
+            records.append(
+                {
+                    "kind": "train_step",
+                    "method": method,
+                    "seed": seed,
+                    "step": step,
+                    "wall_time_seconds": float(step * 10 - 1),
+                    "environment_samples": environment_samples,
+                    "generated_tokens": environment_samples * 5,
+                    "scored_tokens": environment_samples * (18 if is_forward else 10),
+                    "forward_calls": forward_calls,
+                    "full_prefix_calls": forward_calls,
+                    "suffix_calls": forward_calls,
+                    "backward_calls": backward_calls,
+                    "peak_gpu_memory_bytes": 1024 + step,
+                    "peak_gpu_memory_allocated_bytes": 1024 + step,
+                    "peak_gpu_memory_reserved_bytes": 2048 + step,
+                    "rollout_and_old_score_seconds": 2.0,
+                    "optimizer_seconds": 3.0,
+                    "derivative_variance": None,
+                }
+            )
+            if step % config["eval_interval"] == 0:
+                records.append(
+                    _evaluation(
+                        method,
+                        seed,
+                        step,
+                        environment_samples=environment_samples,
+                        forward_calls=forward_calls,
+                        backward_calls=backward_calls,
+                    )
+                )
+    if config["run_test_evaluation"]:
+        final_samples = 0 if is_base else config["steps"] * config["batch_size"] * config["group_size"]
+        final_forward = 0 if is_base else config["steps"] * (8 if is_forward else 3)
+        final_backward = 0 if is_base or is_forward else config["steps"]
+        records.append(
+            _evaluation(
+                method,
+                seed,
+                0 if is_base else config["steps"],
+                environment_samples=final_samples,
+                forward_calls=final_forward,
+                backward_calls=final_backward,
+                split="test",
+            )
+        )
+    return records
+
+
+def _write_jsonl(path: Path, records: list[dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "".join(json.dumps(record, sort_keys=True, allow_nan=False) + "\n" for record in records),
+        encoding="utf-8",
+    )
+
+
+def _expected_trials(config: dict[str, Any]) -> list[tuple[str, int]]:
+    trials: list[tuple[str, int]] = []
+    for method in config["methods"]:
+        seeds = config["seeds"][:1] if method == "base" else config["seeds"]
+        trials.extend((method, seed) for seed in seeds)
+    return trials
+
+
+def _build_complete_artifacts(root: Path) -> tuple[Path, dict[str, Any]]:
+    output = root / "benchmark"
+    config = _config()
+    metadata = {
+        "config": config,
+        "git_commit": "0123456789abcdef0123456789abcdef01234567",
+        "provenance": {
+            "model": {
+                "id": config["model_name"],
+                "revision": "model-snapshot-abc123",
+            },
+            "dataset": {
+                "id": "DigitalLearningGmbH/MATH-lighteval",
+                "fingerprint": "dataset-fingerprint-123",
+            },
+        },
+        "train_example_ids": ["train-0", "train-1"],
+        "val_example_ids": ["val-0", "val-1"],
+        "test_example_ids": ["test-0", "test-1", "test-2"],
+        "excluded_test_example_ids": ["excluded-0"],
+    }
+    output.mkdir(parents=True)
+    (output / "metadata.json").write_text(
+        json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    for index, (method, seed) in enumerate(_expected_trials(config)):
+        stem = f"math_{method}_seed{seed}"
+        _write_jsonl(output / "raw" / f"{stem}.jsonl", _records(method, seed, config))
+        checkpoint = output / "checkpoints" / f"{stem}.pt"
+        checkpoint.parent.mkdir(parents=True, exist_ok=True)
+        checkpoint.write_bytes(b"tiny deterministic checkpoint")
+        samples = output / "samples" / f"{stem}.json"
+        samples.parent.mkdir(parents=True, exist_ok=True)
+        samples.write_text(
+            json.dumps([{"example_id": "test-0", "score": 1.0}], allow_nan=False) + "\n",
+            encoding="utf-8",
+        )
+
+        wandb = output / "wandb" / f"offline-run-20260101_00000{index}-run{index}"
+        (wandb / "logs").mkdir(parents=True, exist_ok=True)
+        (wandb / f"run-run{index}.wandb").write_bytes(b"offline wandb payload")
+        (wandb / "logs" / "debug.log").write_text(
+            "run started, returning control to user process\nfinishing run\n",
+            encoding="utf-8",
+        )
+    return output, metadata
+
+
+def _load_records(path: Path) -> list[dict[str, Any]]:
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+
+
+def test_complete_synthetic_sweep_passes_library_and_cli(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    output, _ = _build_complete_artifacts(tmp_path)
+
+    result = validate_benchmark_artifacts(output)
+
+    assert result.status == "complete"
+    assert result.passed
+    assert result.expected_runs == 5
+    assert result.validated_runs == 5
+    assert result.incomplete == ()
+    assert result.errors == ()
+    assert main([str(output)]) == 0
+    assert capsys.readouterr().out.startswith("COMPLETE:")
+
+
+def test_trailing_partial_jsonl_is_clearly_incomplete(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    output, _ = _build_complete_artifacts(tmp_path)
+    raw = output / "raw" / "math_fo_npg_seed1.jsonl"
+    with raw.open("a", encoding="utf-8") as handle:
+        handle.write('{"kind": "train_step"')
+
+    result = validate_benchmark_artifacts(output)
+
+    assert result.status == "incomplete"
+    assert not result.passed
+    assert any("incomplete or malformed" in message for message in result.incomplete)
+    assert main([str(output)]) == 1
+    assert capsys.readouterr().out.startswith("INCOMPLETE:")
+
+
+def test_missing_run_artifacts_and_unfinished_wandb_do_not_silently_pass(tmp_path: Path) -> None:
+    output, _ = _build_complete_artifacts(tmp_path)
+    (output / "checkpoints" / "math_fo_npg_seed1.pt").unlink()
+    (output / "samples" / "math_fo_npg_seed1.json").unlink()
+    unfinished = max((output / "wandb").glob("offline-run-*"))
+    (unfinished / "logs" / "debug.log").write_text(
+        "run started, returning control to user process\n",
+        encoding="utf-8",
+    )
+
+    result = validate_benchmark_artifacts(output)
+
+    assert result.status == "incomplete"
+    assert any("missing expected checkpoint" in message for message in result.incomplete)
+    assert any("missing expected samples" in message for message in result.incomplete)
+    assert any("not finished cleanly" in message for message in result.incomplete)
+
+
+def test_selection_counter_and_backward_invariants_fail(tmp_path: Path) -> None:
+    output, _ = _build_complete_artifacts(tmp_path)
+    raw = output / "raw" / "math_fo_npg_seed0.jsonl"
+    records = _load_records(raw)
+    test_record = next(record for record in records if record.get("split") == "test")
+    test_record.pop("selected_step")
+    test_record.pop("selection_val_accuracy")
+    train_records = [record for record in records if record["kind"] == "train_step"]
+    train_records[1]["forward_calls"] = train_records[0]["forward_calls"] - 1
+    train_records[2]["backward_calls"] = 1
+    _write_jsonl(raw, records)
+
+    result = validate_benchmark_artifacts(output)
+
+    assert result.status == "invalid"
+    joined = "\n".join(result.errors)
+    assert "missing integer selected_step" in joined
+    assert "missing a finite selection metric" in joined
+    assert "counter 'forward_calls' decreases" in joined
+    assert "forward-only" in joined and "backward_calls=1" in joined
+
+
+def test_evaluation_counts_environment_budget_and_explicit_test_are_enforced(
+    tmp_path: Path,
+) -> None:
+    output, _ = _build_complete_artifacts(tmp_path)
+    raw = output / "raw" / "math_bp_grpo_seed0.jsonl"
+    records = _load_records(raw)
+    records = [record for record in records if not (record["kind"] == "train_step" and record["step"] == 4)]
+    test_record = next(record for record in records if record.get("split") == "test")
+    test_record.pop("split")
+    test_record["environment_samples"] = 18
+    _write_jsonl(raw, records)
+
+    result = validate_benchmark_artifacts(output)
+
+    assert result.status == "incomplete"
+    joined = "\n".join((*result.incomplete, *result.errors))
+    assert "3/4 expected train-step records" in joined
+    assert "missing its explicit official-test evaluation" in joined
+    assert "environment budget is incomplete" in joined
+
+
+def test_provenance_nonfinite_values_and_test_overlap_are_rejected(tmp_path: Path) -> None:
+    output, metadata = _build_complete_artifacts(tmp_path)
+    metadata["provenance"]["model"].pop("revision")
+    metadata["provenance"]["dataset"].pop("fingerprint")
+    metadata["test_example_ids"][0] = "train-0"
+    metadata["telemetry"] = {"bad": float("nan")}
+    # YAML can represent NaN, allowing the recursive finite-value check to be
+    # exercised without writing non-standard JSON.
+    metadata_yaml = output / "metadata.yaml"
+    metadata_yaml.write_text(yaml.safe_dump(metadata, sort_keys=True), encoding="utf-8")
+
+    result = validate_benchmark_artifacts(output, metadata_path=metadata_yaml)
+
+    assert result.status == "invalid"
+    joined = "\n".join(result.errors)
+    assert "immutable model revision" in joined
+    assert "dataset revision/fingerprint" in joined
+    assert "official-test IDs overlap excluded IDs" in joined
+    assert "non-finite numeric value" in joined
+
+
+def test_external_config_is_checked_against_embedded_lock(tmp_path: Path) -> None:
+    output, _ = _build_complete_artifacts(tmp_path)
+    external = _config()
+    external["steps"] = 5
+    config_path = tmp_path / "mismatched.yaml"
+    config_path.write_text(yaml.safe_dump(external, sort_keys=True), encoding="utf-8")
+
+    result = validate_benchmark_artifacts(output, config_path=config_path)
+
+    assert result.status == "incomplete"
+    assert any("disagrees with metadata.config" in message for message in result.errors)
+    assert any("expected train-step records" in message for message in result.incomplete)
+
+
+def test_machine_readable_cli_failure_is_nonzero(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    output, _ = _build_complete_artifacts(tmp_path)
+    (output / "metadata.json").unlink()
+
+    assert main([str(output), "--json"]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "incomplete"
+    assert payload["passed"] is False

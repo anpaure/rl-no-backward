@@ -1,0 +1,64 @@
+model_name: Qwen/Qwen2.5-1.5B-Instruct
+model_revision: 989aa7980e4cf806f80c7fef2b1adb7bc71aa306
+dataset_revision: 740312add88f781978c0658806c59bc2815b9866
+dtype: bfloat16
+device: cuda
+attention_implementation: flash_attention_2
+compile_model_forward: false
+compile_model_forward_mode: reduce-overhead
+rollout_backend: vllm
+vllm_kv_cache_memory_bytes: 2147483648
+vllm_enforce_eager: false
+vllm_flash_attn_version: 2
+vllm_allow_insecure_serialization: true
+vllm_logprob_mean_abs_tolerance: 0.02
+vllm_logprob_p99_abs_tolerance: 0.2
+vllm_logprob_max_abs_tolerance: 0.5
+adapter_rank: 8
+adapter_layers: 4
+adapter_scale: 1.0
+train_size: 32
+val_size: 8
+test_size: 0
+run_test_evaluation: false
+subset_seed: 314159
+min_reasoning_lines: 0
+max_reasoning_lines: 1000
+max_answer_magnitude: 1000000000000000000
+methods: [base, bp_grpo, fo_npg]
+seeds: [0]
+steps: 3
+batch_size: 2
+group_size: 8
+max_prompt_tokens: 256
+max_new_tokens: 512
+sampling_temperature: 0.8
+scoring_micro_batch_size: 16
+use_frozen_prefix_scoring: true
+eval_interval: 3
+eval_batch_size: 8
+numeric_shaping_weight: 0.1
+calibration_examples: 16
+wandb_project: rl-no-backward
+wandb_mode: disabled
+backprop:
+  learning_rate: 0.001
+  epochs_per_rollout: 1
+  clip_epsilon: 0.2
+  max_grad_norm: 1.0
+  scoring_micro_batch_size: 4
+  use_streaming_backward: true
+forward:
+  directions: 8
+  finite_difference_mu: 2.0
+  fisher_damping: 0.2
+  kl_budget: 0.001
+  clip_epsilon: 0.2
+  max_step_norm: 0.15
+  line_search_steps: 10
+  active_rank: 4
+  history_size: 12
+  scoring_micro_batch_size: 16
+  use_fused_probes: true
+  fused_probe_directions_per_forward: 2
+  fused_probe_examples_per_forward: 4

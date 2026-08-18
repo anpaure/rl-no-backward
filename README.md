@@ -77,6 +77,25 @@ uv run python -m rl_no_backward.plotting \
   artifacts/final_gsm8k artifacts/figures
 ```
 
+For the optimized H100 path, the setup script creates a separate vLLM 0.22
+runtime and installs the matching, checksum-verified FlashAttention-2 wheel
+from the requested prebuilt-wheel repository; it does not compile
+FlashAttention from source:
+
+```bash
+./scripts/install_h100_fastpath.sh
+PYTHONPATH=src .venv-vllm/bin/python -m rl_no_backward.cli gsm8k \
+  --config configs/gsm8k_optimized_gate.yaml \
+  --output artifacts/gates/vllm_eager
+```
+
+The optimized trainer can cache the frozen first 24 Qwen blocks once per
+stored rollout and replay only the adapted final four blocks for old-policy
+scoring, BP updates, forward-only probes, and line search. It also asks Qwen's
+LM head to materialize logits only at response-prediction positions. Both
+fast paths are opt-in and fall back with explicit telemetry when the model
+structure is unsupported.
+
 On an H100 host that already provides a compatible CUDA PyTorch build, a
 system-site-packages environment avoids downloading another multi-gigabyte
 wheel:
@@ -109,6 +128,11 @@ Append-only JSONL is the plotting source of truth, so all figures can be
 regenerated without W&B. The final report and measured results are in
 [`REPORT.md`](REPORT.md) and `artifacts/figures/` once the locked sweep is
 complete.
+
+The completed unoptimized base and BP-GRPO seed-0 run is preserved separately
+under [`artifacts/reference_eager_gsm8k`](artifacts/reference_eager_gsm8k).
+Its README labels it as a regression/performance reference and records the
+interrupted seed that was deliberately excluded.
 
 ## Scope
 

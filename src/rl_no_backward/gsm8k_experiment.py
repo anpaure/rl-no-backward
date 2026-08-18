@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import os
@@ -19,6 +20,8 @@ import torch
 from torch import Tensor
 
 from .gsm8k import (
+    GSM8K_DATASET_CONFIG,
+    GSM8K_DATASET_ID,
     DifficultyFilter,
     GSM8KExample,
     exact_match_reward,
@@ -29,9 +32,14 @@ from .gsm8k import (
     select_seeded_subset,
 )
 from .model import (
+    ATTENTION_IMPLEMENTATIONS,
+    TORCH_COMPILE_MODES,
     ModelBundle,
+    installed_flash_attn_version,
     load_model_bundle,
+    model_forward_is_compiled,
     parameter_vector,
+    resolved_attention_implementation,
     set_adapter_grad_enabled,
     set_parameter_vector,
 )
@@ -39,12 +47,29 @@ from .sequence_optimizers import (
     BackpropSequenceConfig,
     ForwardSequenceConfig,
     SequenceActiveSubspace,
+    enable_batched_probe_adapters,
     forward_sequence_step,
     make_sequence_grpo_optimizer,
     sequence_grpo_step,
 )
-from .sequence_policy import CompletionSample, generate_sequence_rollouts
+from .sequence_policy import (
+    CompletionSample,
+    SequenceRolloutBatch,
+    _decode_response,
+    _left_padded_prompts,
+    _resolve_eos_token_ids,
+    _resolve_pad_token_id,
+    attach_frozen_prefix_cache,
+    generate_sequence_rollouts,
+    group_leave_one_out_advantages,
+    teacher_forced_token_log_probs,
+)
 from .task import CANDIDATE_ACTIONS
+from .vllm_rollout import (
+    OnPolicyVLLMGenerator,
+    capture_residual_adapter_snapshot,
+    create_vllm_engine,
+)
 
 GSM8K_METHODS = ("base", "bp_grpo", "fo_pg", "fo_npg", "focus_npg")
 
@@ -56,6 +81,9 @@ class GSM8KExperimentConfig:
     dataset_revision: str | None = None
     dtype: str = "bfloat16"
     device: str = "cuda"
+    attention_implementation: str = "eager"
+    compile_model_forward: bool = False
+    compile_model_forward_mode: str = "default"
     adapter_rank: int = 8
     adapter_layers: int = 4
     adapter_scale: float = 1.0
@@ -79,6 +107,7 @@ class GSM8KExperimentConfig:
     max_new_tokens: int = 256
     sampling_temperature: float = 0.8
     scoring_micro_batch_size: int = 4
+    use_frozen_prefix_scoring: bool = False
     eval_interval: int = 10
     eval_batch_size: int = 4
     numeric_shaping_weight: float = 0.1
@@ -86,6 +115,14 @@ class GSM8KExperimentConfig:
     wandb_project: str = "rl-no-backward"
     wandb_entity: str | None = None
     wandb_mode: str = "offline"
+    rollout_backend: str = "hf"
+    vllm_kv_cache_memory_bytes: int = 2 * 1024**3
+    vllm_enforce_eager: bool = True
+    vllm_flash_attn_version: int = 2
+    vllm_allow_insecure_serialization: bool = False
+    vllm_logprob_mean_abs_tolerance: float = 0.02
+    vllm_logprob_p99_abs_tolerance: float = 0.2
+    vllm_logprob_max_abs_tolerance: float = 0.5
     backprop: dict[str, Any] = field(default_factory=dict)
     forward: dict[str, Any] = field(default_factory=dict)
 
@@ -131,10 +168,94 @@ class GSM8KExperimentConfig:
             raise ValueError("numeric_shaping_weight must lie in [0, 1)")
         if self.sampling_temperature <= 0:
             raise ValueError("sampling_temperature must be positive")
+        if not isinstance(self.use_frozen_prefix_scoring, bool):
+            raise TypeError("use_frozen_prefix_scoring must be boolean")
         if self.wandb_mode not in {"online", "offline", "disabled"}:
             raise ValueError("wandb_mode must be online, offline, or disabled")
+        if self.rollout_backend not in {"hf", "vllm"}:
+            raise ValueError("rollout_backend must be hf or vllm")
+        if self.rollout_backend == "vllm" and not str(self.device).startswith("cuda"):
+            raise ValueError("the vLLM rollout backend requires a CUDA device")
+        if (
+            isinstance(self.vllm_kv_cache_memory_bytes, bool)
+            or not isinstance(self.vllm_kv_cache_memory_bytes, int)
+            or self.vllm_kv_cache_memory_bytes < 1
+        ):
+            raise ValueError("vllm_kv_cache_memory_bytes must be a positive integer")
+        if not isinstance(self.vllm_enforce_eager, bool):
+            raise TypeError("vllm_enforce_eager must be boolean")
+        if (
+            isinstance(self.vllm_flash_attn_version, bool)
+            or not isinstance(self.vllm_flash_attn_version, int)
+            or self.vllm_flash_attn_version not in {2, 3}
+        ):
+            raise ValueError("vllm_flash_attn_version must be 2 or 3")
+        if not isinstance(self.vllm_allow_insecure_serialization, bool):
+            raise TypeError("vllm_allow_insecure_serialization must be boolean")
+        if self.rollout_backend == "vllm" and not self.vllm_allow_insecure_serialization:
+            raise ValueError(
+                "the mutable vLLM rollout backend requires explicit "
+                "vllm_allow_insecure_serialization=true for trusted local callable IPC"
+            )
+        for name in (
+            "vllm_logprob_mean_abs_tolerance",
+            "vllm_logprob_p99_abs_tolerance",
+            "vllm_logprob_max_abs_tolerance",
+        ):
+            value = getattr(self, name)
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+                or value < 0
+            ):
+                raise ValueError(f"{name} must be finite and non-negative")
+        if not (
+            self.vllm_logprob_mean_abs_tolerance
+            <= self.vllm_logprob_p99_abs_tolerance
+            <= self.vllm_logprob_max_abs_tolerance
+        ):
+            raise ValueError("vLLM log-prob tolerances must satisfy mean <= p99 <= maximum")
+        if not isinstance(self.attention_implementation, str) or (
+            self.attention_implementation not in ATTENTION_IMPLEMENTATIONS
+        ):
+            raise ValueError(
+                f"attention_implementation must be one of {', '.join(ATTENTION_IMPLEMENTATIONS)}"
+            )
+        if not isinstance(self.compile_model_forward, bool):
+            raise TypeError("compile_model_forward must be boolean")
+        if not isinstance(self.compile_model_forward_mode, str) or (
+            self.compile_model_forward_mode not in TORCH_COMPILE_MODES
+        ):
+            raise ValueError(
+                f"compile_model_forward_mode must be one of {', '.join(TORCH_COMPILE_MODES)}"
+            )
         if not self.seeds:
             raise ValueError("at least one seed is required")
+        if not isinstance(self.backprop, Mapping):
+            raise TypeError("backprop must be a mapping")
+        if not isinstance(self.forward, Mapping):
+            raise TypeError("forward must be a mapping")
+        BackpropSequenceConfig(**dict(self.backprop))
+        # Validate the shared forward settings independently of which
+        # forward-only methods are selected for this run.
+        ForwardSequenceConfig(method="fo_pg", **dict(self.forward))
+
+
+def _model_runtime_metadata(
+    bundle: ModelBundle,
+    config: GSM8KExperimentConfig,
+) -> dict[str, Any]:
+    """Return requested and effective Hugging Face execution controls."""
+
+    return {
+        "requested_attention_implementation": config.attention_implementation,
+        "resolved_attention_implementation": resolved_attention_implementation(bundle.model),
+        "flash_attn_version": installed_flash_attn_version(),
+        "compile_model_forward": config.compile_model_forward,
+        "compile_model_forward_mode": config.compile_model_forward_mode,
+        "model_forward_compiled": model_forward_is_compiled(bundle.model),
+    }
 
 
 def _chat_formatter(
@@ -205,6 +326,174 @@ def _exact_rollout_metrics(
     )
 
 
+def _unpadded_prompt_token_ids(
+    prompt_input_ids: Tensor, prompt_attention_mask: Tensor
+) -> tuple[tuple[int, ...], ...]:
+    return tuple(
+        tuple(int(token_id) for token_id in row[mask].detach().cpu().tolist())
+        for row, mask in zip(prompt_input_ids, prompt_attention_mask.bool(), strict=True)
+    )
+
+
+def _vllm_policy_fields(
+    rollout_policy: OnPolicyVLLMGenerator | None,
+    *,
+    field_prefix: str = "rollout_policy",
+) -> dict[str, str | None]:
+    if rollout_policy is None:
+        return {
+            f"{field_prefix}_version": None,
+            f"{field_prefix}_state_digest": None,
+        }
+    return {
+        f"{field_prefix}_version": rollout_policy.policy_version,
+        f"{field_prefix}_state_digest": rollout_policy.state_digest,
+    }
+
+
+def _sync_vllm_policy(
+    bundle: ModelBundle,
+    rollout_policy: OnPolicyVLLMGenerator | None,
+    *,
+    version: str,
+) -> None:
+    if rollout_policy is None:
+        return
+    snapshot = capture_residual_adapter_snapshot(bundle)
+    rollout_policy.sync(snapshot, version=version, include_bases=False)
+
+
+@torch.no_grad()
+def _generate_vllm_sequence_rollouts(
+    bundle: ModelBundle,
+    prompts: Sequence[str],
+    examples: Sequence[GSM8KExample],
+    config: GSM8KExperimentConfig,
+    rollout_policy: OnPolicyVLLMGenerator,
+    *,
+    seed: int,
+) -> tuple[SequenceRolloutBatch, dict[str, float]]:
+    """Build a regular rollout from vLLM behavior tokens and probabilities."""
+
+    eos_token_ids = _resolve_eos_token_ids(bundle)
+    pad_token_id = _resolve_pad_token_id(bundle, eos_token_ids)
+    prompt_input_ids, prompt_attention_mask = _left_padded_prompts(
+        bundle,
+        prompts,
+        config.max_prompt_tokens,
+        pad_token_id,
+    )
+    prompt_token_ids = _unpadded_prompt_token_ids(prompt_input_ids, prompt_attention_mask)
+    behavior_version = rollout_policy.policy_version
+    behavior_digest = rollout_policy.state_digest
+    if behavior_version is None or behavior_digest is None:
+        raise RuntimeError("vLLM generation requires a fully synchronized behavior policy")
+    generated = rollout_policy.generate(
+        prompt_token_ids,
+        group_size=config.group_size,
+        max_new_tokens=config.max_new_tokens,
+        temperature=config.sampling_temperature,
+        seed=seed,
+        pad_token_id=pad_token_id,
+        eos_token_ids=eos_token_ids,
+        device=bundle.device,
+    )
+    if generated.policy_version != behavior_version:
+        raise RuntimeError(
+            "vLLM generation returned the wrong behavior-policy version: "
+            f"expected {behavior_version!r}, got {generated.policy_version!r}"
+        )
+    if (
+        rollout_policy.policy_version != behavior_version
+        or rollout_policy.state_digest != behavior_digest
+    ):
+        raise RuntimeError("vLLM behavior policy changed during blocking generation")
+
+    completion_groups: list[tuple[str, ...]] = []
+    reward_groups: list[list[float]] = []
+    reward_callback = _reward_callback(examples, config.numeric_shaping_weight)
+    for prompt_index, prompt in enumerate(prompts):
+        completion_group: list[str] = []
+        reward_group: list[float] = []
+        for group_index in range(config.group_size):
+            valid_ids = generated.response_input_ids[prompt_index, group_index][
+                generated.response_mask[prompt_index, group_index]
+            ]
+            completion = _decode_response(bundle.tokenizer, valid_ids)
+            sample = CompletionSample(
+                prompt_index=prompt_index,
+                group_index=group_index,
+                prompt=prompt,
+                completion=completion,
+                response_token_ids=tuple(int(token_id) for token_id in valid_ids.tolist()),
+            )
+            reward = reward_callback(sample)
+            completion_group.append(completion)
+            reward_group.append(float(reward))
+        completion_groups.append(tuple(completion_group))
+        reward_groups.append(reward_group)
+
+    rewards = torch.tensor(reward_groups, dtype=torch.float32, device=bundle.device)
+    rollout = SequenceRolloutBatch(
+        prompts=tuple(prompts),
+        completions=tuple(completion_groups),
+        prompt_input_ids=prompt_input_ids,
+        prompt_attention_mask=prompt_attention_mask,
+        response_input_ids=generated.response_input_ids,
+        response_mask=generated.response_mask,
+        old_token_log_probs=generated.old_token_log_probs.detach(),
+        rewards=rewards,
+        advantages=group_leave_one_out_advantages(rewards),
+        sampling_temperature=config.sampling_temperature,
+        pad_token_id=pad_token_id,
+        eos_token_ids=eos_token_ids,
+    )
+    if config.use_frozen_prefix_scoring:
+        rollout = attach_frozen_prefix_cache(bundle, rollout)
+
+    # q_vLLM is the actual behavior distribution, so it remains the GRPO
+    # denominator.  A same-weight HF score is a mandatory equivalence gate,
+    # not a replacement that would conceal an off-policy rollout.
+    hf_center_log_probs = teacher_forced_token_log_probs(
+        bundle,
+        rollout,
+        micro_batch_size=config.scoring_micro_batch_size,
+    ).detach()
+    signed_delta = hf_center_log_probs - rollout.old_token_log_probs
+    valid_delta = signed_delta[rollout.response_mask].float()
+    absolute_delta = valid_delta.abs()
+    mean_absolute = float(absolute_delta.mean().item())
+    maximum_absolute = float(absolute_delta.max().item())
+    p99_absolute = float(torch.quantile(absolute_delta, 0.99).item())
+    mean_signed = float(valid_delta.mean().item())
+    maximum_ratio_deviation = float((valid_delta.exp() - 1.0).abs().max().item())
+    diagnostics = {
+        "behavior_hf_logprob_mean_abs_delta": mean_absolute,
+        "behavior_hf_logprob_p99_abs_delta": p99_absolute,
+        "behavior_hf_logprob_max_abs_delta": maximum_absolute,
+        "behavior_hf_logprob_mean_signed_delta": mean_signed,
+        "behavior_hf_max_importance_ratio_deviation": maximum_ratio_deviation,
+    }
+    if (
+        mean_absolute > config.vllm_logprob_mean_abs_tolerance
+        or p99_absolute > config.vllm_logprob_p99_abs_tolerance
+        or maximum_absolute > config.vllm_logprob_max_abs_tolerance
+    ):
+        raise RuntimeError(
+            "vLLM/HF behavior-policy equivalence gate failed: "
+            f"mean_abs={mean_absolute:.6g} "
+            f"(limit {config.vllm_logprob_mean_abs_tolerance:.6g}), "
+            f"p99_abs={p99_absolute:.6g} "
+            f"(limit {config.vllm_logprob_p99_abs_tolerance:.6g}), "
+            f"max_abs={maximum_absolute:.6g} "
+            f"(limit {config.vllm_logprob_max_abs_tolerance:.6g}), "
+            f"max_ratio_deviation={maximum_ratio_deviation:.6g}; "
+            f"HF attention={config.attention_implementation!r}, "
+            f"vLLM flash_attn_version={config.vllm_flash_attn_version}"
+        )
+    return rollout, diagnostics
+
+
 def _sync(device: torch.device) -> None:
     if device.type == "cuda":
         torch.cuda.synchronize(device)
@@ -267,8 +556,12 @@ def _log_wandb(run: Any | None, record: dict[str, Any]) -> None:
         "generated_tokens",
         "scored_tokens",
         "forward_calls",
+        "full_prefix_calls",
+        "suffix_calls",
         "backward_calls",
         "peak_gpu_memory_bytes",
+        "peak_gpu_memory_allocated_bytes",
+        "peak_gpu_memory_reserved_bytes",
     }
     payload: dict[str, Any] = {"optimizer_step": record["step"]}
     for key, value in _json_safe(record).items():
@@ -299,12 +592,30 @@ def _rollout_truncation_fraction(rollout: Any, tokenizer: object) -> float:
     return float((~ended).float().mean().item())
 
 
+def _peak_gpu_memory_metrics(device: torch.device) -> dict[str, int]:
+    """Return cumulative CUDA allocator peaks with a compatibility alias."""
+
+    if device.type == "cuda":
+        allocated = int(torch.cuda.max_memory_allocated(device))
+        reserved = int(torch.cuda.max_memory_reserved(device))
+    else:
+        allocated = 0
+        reserved = 0
+    return {
+        # Historical artifacts used this key for allocated—not reserved—bytes.
+        "peak_gpu_memory_bytes": allocated,
+        "peak_gpu_memory_allocated_bytes": allocated,
+        "peak_gpu_memory_reserved_bytes": reserved,
+    }
+
+
 @torch.inference_mode()
 def evaluate_gsm8k(
     bundle: ModelBundle,
     examples: Sequence[GSM8KExample],
     config: GSM8KExperimentConfig,
     metric_prefix: str = "val",
+    rollout_policy: OnPolicyVLLMGenerator | None = None,
 ) -> tuple[dict[str, float], list[dict[str, Any]]]:
     """Greedy exact-match evaluation on a fixed official-test subset."""
 
@@ -318,28 +629,65 @@ def evaluate_gsm8k(
     eos_ids = _eos_token_ids(bundle.tokenizer)
     eos_id = bundle.tokenizer.eos_token_id
     pad_id = bundle.tokenizer.pad_token_id
+    evaluation_policy_version: str | None = None
+    evaluation_policy_digest: str | None = None
+    if rollout_policy is not None:
+        evaluation_policy_version = rollout_policy.policy_version
+        evaluation_policy_digest = rollout_policy.state_digest
+        if evaluation_policy_version is None or evaluation_policy_digest is None:
+            raise RuntimeError("vLLM evaluation requires a fully synchronized policy")
     for start in range(0, len(examples), config.eval_batch_size):
         batch_examples = examples[start : start + config.eval_batch_size]
         batch_prompts = prompts[start : start + config.eval_batch_size]
-        encoded = bundle.tokenizer(
-            batch_prompts,
-            return_tensors="pt",
-            padding=True,
-            truncation=True,
-            max_length=config.max_prompt_tokens,
-        )
-        encoded = {name: value.to(bundle.device) for name, value in encoded.items()}
-        generated = bundle.model.generate(
-            **encoded,
-            max_new_tokens=config.max_new_tokens,
-            do_sample=False,
-            pad_token_id=pad_id,
-            eos_token_id=eos_id,
-        )
-        response_ids = generated[:, encoded["input_ids"].shape[1] :]
-        completions = bundle.tokenizer.batch_decode(response_ids, skip_special_tokens=True)
+        if rollout_policy is None:
+            encoded = bundle.tokenizer(
+                batch_prompts,
+                return_tensors="pt",
+                padding=True,
+                truncation=True,
+                max_length=config.max_prompt_tokens,
+            )
+            encoded = {name: value.to(bundle.device) for name, value in encoded.items()}
+            generated = bundle.model.generate(
+                **encoded,
+                max_new_tokens=config.max_new_tokens,
+                do_sample=False,
+                pad_token_id=pad_id,
+                eos_token_id=eos_id,
+            )
+            response_ids = generated[:, encoded["input_ids"].shape[1] :]
+            token_sequences = [row for row in response_ids]
+        else:
+            prompt_ids, prompt_mask = _left_padded_prompts(
+                bundle,
+                batch_prompts,
+                config.max_prompt_tokens,
+                int(pad_id),
+            )
+            greedy = rollout_policy.generate_greedy(
+                _unpadded_prompt_token_ids(prompt_ids, prompt_mask),
+                max_new_tokens=config.max_new_tokens,
+                eos_token_ids=eos_ids,
+            )
+            if greedy.policy_version != evaluation_policy_version:
+                raise RuntimeError(
+                    "vLLM greedy evaluation returned the wrong policy version: "
+                    f"expected {evaluation_policy_version!r}, got {greedy.policy_version!r}"
+                )
+            if (
+                rollout_policy.policy_version != evaluation_policy_version
+                or rollout_policy.state_digest != evaluation_policy_digest
+            ):
+                raise RuntimeError("vLLM policy changed during greedy evaluation")
+            token_sequences = [
+                torch.tensor(token_ids, dtype=torch.long, device=bundle.device)
+                for token_ids in greedy.response_token_ids
+            ]
+        completions = [
+            _decode_response(bundle.tokenizer, token_ids) for token_ids in token_sequences
+        ]
         for example, completion, token_ids in zip(
-            batch_examples, completions, response_ids, strict=True
+            batch_examples, completions, token_sequences, strict=True
         ):
             predicted = extract_model_answer(completion)
             exact = exact_match_reward(completion, example)
@@ -393,6 +741,13 @@ def _sample_training_batch(
     examples: Sequence[GSM8KExample], batch_size: int, rng: random.Random
 ) -> list[GSM8KExample]:
     return [examples[rng.randrange(len(examples))] for _ in range(batch_size)]
+
+
+def _example_id_fingerprint(examples: Sequence[GSM8KExample]) -> str:
+    digest = hashlib.sha256()
+    for example in examples:
+        digest.update(example.example_id.encode("utf-8") + b"\0")
+    return digest.hexdigest()
 
 
 def _git_commit() -> str | None:
@@ -462,6 +817,8 @@ def run_gsm8k_trial(
     initial_val_metrics: Mapping[str, float],
     initial_val_samples: Sequence[Mapping[str, Any]],
     output_dir: Path,
+    initial_evaluation_seconds: float = 0.0,
+    rollout_policy: OnPolicyVLLMGenerator | None = None,
 ) -> Path:
     """Run one matched method/seed trial and persist all raw evidence."""
 
@@ -480,6 +837,15 @@ def run_gsm8k_trial(
     set_parameter_vector(bundle, initial_parameters)
     bundle.model.eval()
     set_adapter_grad_enabled(bundle, method == "bp_grpo")
+    if config.rollout_backend == "vllm" and rollout_policy is None:
+        raise ValueError("rollout_backend='vllm' requires an initialized rollout policy")
+    if config.rollout_backend == "hf" and rollout_policy is not None:
+        raise ValueError("the HF rollout backend must not receive a vLLM policy")
+    _sync_vllm_policy(
+        bundle,
+        rollout_policy,
+        version=f"method={method}/seed={seed}/reset",
+    )
     if bundle.device.type == "cuda":
         torch.cuda.empty_cache()
         torch.cuda.reset_peak_memory_stats(bundle.device)
@@ -500,6 +866,8 @@ def run_gsm8k_trial(
     cumulative_generated_tokens = 0
     cumulative_scored_tokens = 0
     cumulative_forward_calls = 0
+    cumulative_full_prefix_calls = 0
+    cumulative_suffix_calls = 0
     cumulative_backward_calls = 0
     cumulative_teacher_forced_examples = 0
     final_samples = [dict(sample) for sample in initial_val_samples]
@@ -509,12 +877,17 @@ def run_gsm8k_trial(
         "seed": seed,
         "step": 0,
         "wall_time_seconds": 0.0,
+        "evaluation_seconds": initial_evaluation_seconds,
         "environment_samples": 0,
         "generated_tokens": 0,
         "scored_tokens": 0,
         "forward_calls": 0,
+        "full_prefix_calls": 0,
+        "suffix_calls": 0,
         "backward_calls": 0,
         "teacher_forced_examples": 0,
+        "rollout_backend": config.rollout_backend,
+        **_vllm_policy_fields(rollout_policy),
         **initial_val_metrics,
     }
     _append_jsonl(raw_path, initial_record)
@@ -527,12 +900,26 @@ def run_gsm8k_trial(
 
     if method == "base":
         if config.run_test_evaluation:
+            _sync(bundle.device)
+            evaluation_start = time.perf_counter()
             test_metrics, final_samples = evaluate_gsm8k(
-                bundle, test_examples, config, metric_prefix="test"
+                bundle,
+                test_examples,
+                config,
+                metric_prefix="test",
+                rollout_policy=rollout_policy,
             )
+            _sync(bundle.device)
+            evaluation_seconds = time.perf_counter() - evaluation_start
             test_record = {
                 **initial_record,
                 "split": "test",
+                "selected_step": 0,
+                "selection_val_accuracy": best_val_accuracy,
+                "wall_time_seconds": time.perf_counter() - start_time,
+                "evaluation_seconds": evaluation_seconds,
+                **_vllm_policy_fields(rollout_policy),
+                **_peak_gpu_memory_metrics(bundle.device),
                 **test_metrics,
             }
             _append_jsonl(raw_path, test_record)
@@ -557,21 +944,56 @@ def run_gsm8k_trial(
         batch = _sample_training_batch(train_examples, config.batch_size, prompt_rng)
         prompts = _prompts(bundle.tokenizer, batch)
         set_adapter_grad_enabled(bundle, False)
-        rollout = generate_sequence_rollouts(
-            bundle,
-            prompts,
-            _reward_callback(batch, config.numeric_shaping_weight),
-            group_size=config.group_size,
-            max_new_tokens=config.max_new_tokens,
-            temperature=config.sampling_temperature,
-            max_prompt_tokens=config.max_prompt_tokens,
-            seed=20_000 + seed * 1_000 + step,
-            scoring_micro_batch_size=config.scoring_micro_batch_size,
-        )
+        _sync(bundle.device)
+        rollout_start = time.perf_counter()
+        rollout_seed = 20_000 + seed * 1_000 + step
+        if rollout_policy is None:
+            behavior_policy_fields = _vllm_policy_fields(
+                None,
+                field_prefix="behavior_policy",
+            )
+            rollout = generate_sequence_rollouts(
+                bundle,
+                prompts,
+                _reward_callback(batch, config.numeric_shaping_weight),
+                group_size=config.group_size,
+                max_new_tokens=config.max_new_tokens,
+                temperature=config.sampling_temperature,
+                max_prompt_tokens=config.max_prompt_tokens,
+                seed=rollout_seed,
+                scoring_micro_batch_size=config.scoring_micro_batch_size,
+                use_frozen_prefix_scoring=config.use_frozen_prefix_scoring,
+            )
+            behavior_diagnostics = {
+                "behavior_hf_logprob_mean_abs_delta": 0.0,
+                "behavior_hf_logprob_p99_abs_delta": 0.0,
+                "behavior_hf_logprob_max_abs_delta": 0.0,
+                "behavior_hf_logprob_mean_signed_delta": 0.0,
+                "behavior_hf_max_importance_ratio_deviation": 0.0,
+            }
+        else:
+            # Freeze provenance before generation.  The optimizer sync below
+            # advances ``rollout_policy`` to the next policy version.
+            behavior_policy_fields = _vllm_policy_fields(
+                rollout_policy,
+                field_prefix="behavior_policy",
+            )
+            rollout, behavior_diagnostics = _generate_vllm_sequence_rollouts(
+                bundle,
+                prompts,
+                batch,
+                config,
+                rollout_policy,
+                seed=rollout_seed,
+            )
+        _sync(bundle.device)
+        rollout_and_old_score_seconds = time.perf_counter() - rollout_start
         rollout_exact_reward, exact_zero_advantage_fraction = _exact_rollout_metrics(
             rollout.completions, batch
         )
 
+        _sync(bundle.device)
+        optimizer_start = time.perf_counter()
         if method == "bp_grpo":
             assert optimizer is not None
             result = sequence_grpo_step(bundle, rollout, optimizer, bp_config)
@@ -584,14 +1006,37 @@ def run_gsm8k_trial(
                 fo_config,
                 active_subspace=focus_state,
             )
+        _sync_vllm_policy(
+            bundle,
+            rollout_policy,
+            version=f"method={method}/seed={seed}/step={step}",
+        )
+        next_policy_fields = _vllm_policy_fields(
+            rollout_policy,
+            field_prefix="next_policy",
+        )
+        _sync(bundle.device)
+        optimizer_seconds = time.perf_counter() - optimizer_start
 
-        # One teacher-forced pass (possibly micro-batched) records old-policy
-        # log probabilities immediately after generation.
+        # HF generation records its old-policy probabilities with this pass.
+        # vLLM supplies exact behavior probabilities and spends the same pass
+        # on the mandatory same-weight backend-equivalence gate.
         old_score_calls = math.ceil(rollout.environment_samples / config.scoring_micro_batch_size)
+        frozen_prefix_cache = getattr(rollout, "frozen_prefix_cache", None)
+        if frozen_prefix_cache is None:
+            old_score_full_prefix_calls = old_score_calls
+            old_score_suffix_calls = old_score_calls
+            old_score_forward_calls = old_score_calls
+        else:
+            old_score_full_prefix_calls = frozen_prefix_cache.full_prefix_calls
+            old_score_suffix_calls = old_score_calls
+            old_score_forward_calls = old_score_full_prefix_calls + old_score_suffix_calls
         cumulative_environment_samples += rollout.environment_samples
         cumulative_generated_tokens += rollout.valid_response_tokens
         cumulative_scored_tokens += result.scored_tokens + rollout.valid_response_tokens
-        cumulative_forward_calls += result.forward_calls + old_score_calls
+        cumulative_forward_calls += result.forward_calls + old_score_forward_calls
+        cumulative_full_prefix_calls += result.full_prefix_calls + old_score_full_prefix_calls
+        cumulative_suffix_calls += result.suffix_calls + old_score_suffix_calls
         cumulative_backward_calls += result.backward_calls
         cumulative_teacher_forced_examples += (
             result.teacher_forced_examples + rollout.environment_samples
@@ -603,22 +1048,30 @@ def run_gsm8k_trial(
             "seed": seed,
             "step": step,
             "wall_time_seconds": time.perf_counter() - start_time,
+            "rollout_and_old_score_seconds": rollout_and_old_score_seconds,
+            "optimizer_seconds": optimizer_seconds,
             "environment_samples": cumulative_environment_samples,
             "generated_tokens": cumulative_generated_tokens,
             "scored_tokens": cumulative_scored_tokens,
             "forward_calls": cumulative_forward_calls,
+            "full_prefix_calls": cumulative_full_prefix_calls,
+            "suffix_calls": cumulative_suffix_calls,
             "backward_calls": cumulative_backward_calls,
             "teacher_forced_examples": cumulative_teacher_forced_examples,
-            "peak_gpu_memory_bytes": (
-                int(torch.cuda.max_memory_allocated(bundle.device))
-                if bundle.device.type == "cuda"
-                else 0
+            "rollout_backend": config.rollout_backend,
+            "frozen_prefix_cache_active": frozen_prefix_cache is not None,
+            "frozen_prefix_fallback_reason": getattr(
+                rollout, "frozen_prefix_fallback_reason", None
             ),
+            **behavior_policy_fields,
+            **next_policy_fields,
+            **_peak_gpu_memory_metrics(bundle.device),
             "rollout_exact_reward": rollout_exact_reward,
             "exact_zero_advantage_fraction": exact_zero_advantage_fraction,
             "rollout_shaped_reward": float(rollout.rewards.mean().item()),
             "mean_response_tokens": float(rollout.response_lengths.float().mean().item()),
             "rollout_truncation_fraction": _rollout_truncation_fraction(rollout, bundle.tokenizer),
+            **behavior_diagnostics,
             **asdict(result),
         }
         # Result counters are per-step; the canonical top-level counters are cumulative.
@@ -628,6 +1081,8 @@ def run_gsm8k_trial(
                 "generated_tokens": cumulative_generated_tokens,
                 "scored_tokens": cumulative_scored_tokens,
                 "forward_calls": cumulative_forward_calls,
+                "full_prefix_calls": cumulative_full_prefix_calls,
+                "suffix_calls": cumulative_suffix_calls,
                 "backward_calls": cumulative_backward_calls,
                 "teacher_forced_examples": cumulative_teacher_forced_examples,
             }
@@ -637,27 +1092,35 @@ def run_gsm8k_trial(
 
         if step % config.eval_interval == 0 or step == config.steps:
             set_adapter_grad_enabled(bundle, False)
+            _sync(bundle.device)
+            evaluation_start = time.perf_counter()
             metrics, final_samples = evaluate_gsm8k(
-                bundle, val_examples, config, metric_prefix="val"
+                bundle,
+                val_examples,
+                config,
+                metric_prefix="val",
+                rollout_policy=rollout_policy,
             )
             _sync(bundle.device)
+            evaluation_seconds = time.perf_counter() - evaluation_start
             evaluation_record = {
                 "kind": "evaluation",
                 "method": method,
                 "seed": seed,
                 "step": step,
                 "wall_time_seconds": time.perf_counter() - start_time,
+                "evaluation_seconds": evaluation_seconds,
                 "environment_samples": cumulative_environment_samples,
                 "generated_tokens": cumulative_generated_tokens,
                 "scored_tokens": cumulative_scored_tokens,
                 "forward_calls": cumulative_forward_calls,
+                "full_prefix_calls": cumulative_full_prefix_calls,
+                "suffix_calls": cumulative_suffix_calls,
                 "backward_calls": cumulative_backward_calls,
                 "teacher_forced_examples": cumulative_teacher_forced_examples,
-                "peak_gpu_memory_bytes": (
-                    int(torch.cuda.max_memory_allocated(bundle.device))
-                    if bundle.device.type == "cuda"
-                    else 0
-                ),
+                "rollout_backend": config.rollout_backend,
+                **_vllm_policy_fields(rollout_policy),
+                **_peak_gpu_memory_metrics(bundle.device),
                 **metrics,
             }
             current_val_accuracy = float(metrics["val_accuracy"])
@@ -678,10 +1141,22 @@ def run_gsm8k_trial(
     if config.run_test_evaluation:
         set_adapter_grad_enabled(bundle, False)
         set_parameter_vector(bundle, best_parameters)
-        test_metrics, final_samples = evaluate_gsm8k(
-            bundle, test_examples, config, metric_prefix="test"
+        _sync_vllm_policy(
+            bundle,
+            rollout_policy,
+            version=(f"method={method}/seed={seed}/test-selected-step={best_step}"),
         )
         _sync(bundle.device)
+        evaluation_start = time.perf_counter()
+        test_metrics, final_samples = evaluate_gsm8k(
+            bundle,
+            test_examples,
+            config,
+            metric_prefix="test",
+            rollout_policy=rollout_policy,
+        )
+        _sync(bundle.device)
+        evaluation_seconds = time.perf_counter() - evaluation_start
         test_record = {
             "kind": "evaluation",
             "split": "test",
@@ -691,17 +1166,18 @@ def run_gsm8k_trial(
             "selected_step": best_step,
             "selection_val_accuracy": best_val_accuracy,
             "wall_time_seconds": time.perf_counter() - start_time,
+            "evaluation_seconds": evaluation_seconds,
             "environment_samples": cumulative_environment_samples,
             "generated_tokens": cumulative_generated_tokens,
             "scored_tokens": cumulative_scored_tokens,
             "forward_calls": cumulative_forward_calls,
+            "full_prefix_calls": cumulative_full_prefix_calls,
+            "suffix_calls": cumulative_suffix_calls,
             "backward_calls": cumulative_backward_calls,
             "teacher_forced_examples": cumulative_teacher_forced_examples,
-            "peak_gpu_memory_bytes": (
-                int(torch.cuda.max_memory_allocated(bundle.device))
-                if bundle.device.type == "cuda"
-                else 0
-            ),
+            "rollout_backend": config.rollout_backend,
+            **_vllm_policy_fields(rollout_policy),
+            **_peak_gpu_memory_metrics(bundle.device),
             **test_metrics,
         }
         _append_jsonl(raw_path, test_record)
@@ -789,18 +1265,63 @@ def run_gsm8k_benchmark(
         dtype=config.dtype,
         device=config.device,
         revision=config.model_revision,
+        attention_implementation=config.attention_implementation,
+        compile_model_forward=config.compile_model_forward,
+        compile_model_forward_mode=config.compile_model_forward_mode,
     )
+    forward_template = ForwardSequenceConfig(method="fo_pg", **config.forward)
+    if forward_template.use_fused_probes:
+        enable_batched_probe_adapters(bundle)
+    rollout_policy: OnPolicyVLLMGenerator | None = None
+    initial_vllm_receipts: list[dict[str, Any]] = []
+    vllm_version: str | None = None
+    if config.rollout_backend == "vllm":
+        initial_snapshot = capture_residual_adapter_snapshot(bundle)
+        vllm_engine = create_vllm_engine(
+            config.model_name,
+            initial_snapshot,
+            revision=config.model_revision,
+            dtype=config.dtype,
+            max_model_len=config.max_prompt_tokens + config.max_new_tokens,
+            kv_cache_memory_bytes=config.vllm_kv_cache_memory_bytes,
+            enforce_eager=config.vllm_enforce_eager,
+            flash_attn_version=config.vllm_flash_attn_version,
+            allow_insecure_serialization=config.vllm_allow_insecure_serialization,
+            seed=config.subset_seed,
+            disable_log_stats=True,
+        )
+        rollout_policy = OnPolicyVLLMGenerator(vllm_engine)
+        initial_vllm_receipts = rollout_policy.sync(
+            initial_snapshot,
+            version="benchmark-initial",
+            include_bases=True,
+        )
+        import vllm
+
+        vllm_version = str(vllm.__version__)
     initial_parameters = parameter_vector(bundle).clone()
     set_adapter_grad_enabled(bundle, False)
+    _sync(bundle.device)
+    initial_evaluation_start = time.perf_counter()
     initial_val_metrics, initial_val_samples = evaluate_gsm8k(
         bundle,
         val_examples,
         config,
         metric_prefix="val",
+        rollout_policy=rollout_policy,
     )
+    _sync(bundle.device)
+    initial_evaluation_seconds = time.perf_counter() - initial_evaluation_start
 
     metadata = {
         "config": asdict(config),
+        "dataset_id": GSM8K_DATASET_ID,
+        "dataset_config": GSM8K_DATASET_CONFIG,
+        "dataset_split_fingerprints": {
+            "train": _example_id_fingerprint(train_examples),
+            "validation": _example_id_fingerprint(val_examples),
+            "test": _example_id_fingerprint(test_examples),
+        },
         "adapter_parameter_count": bundle.parameter_count,
         "adapter_names": bundle.adapter_names,
         "train_example_ids": [example.example_id for example in train_examples],
@@ -810,6 +1331,27 @@ def run_gsm8k_benchmark(
         "git_dirty": _git_dirty(),
         "resolved_model_revision": getattr(bundle.model.config, "_commit_hash", None),
         "dataset_revision": config.dataset_revision,
+        "rollout_backend": config.rollout_backend,
+        "rollout_eos_token_ids": list(_resolve_eos_token_ids(bundle)),
+        "behavior_logprob_source": (
+            "vllm_processed_sampling_distribution"
+            if rollout_policy is not None
+            else "hf_teacher_forced_rescore"
+        ),
+        # CUDA allocator peaks are process-local.  A vLLM worker owns its own
+        # allocator, so these metrics compare trainer costs but do not claim to
+        # be whole-device peaks when the optional backend is active.
+        "gpu_memory_metric_scope": "hugging_face_trainer_process_torch_allocator",
+        "gpu_memory_metrics_exclude_vllm_worker": rollout_policy is not None,
+        "vllm_version": vllm_version,
+        "vllm_flash_attn_version": config.vllm_flash_attn_version,
+        "vllm_allow_insecure_serialization": config.vllm_allow_insecure_serialization,
+        "vllm_insecure_serialization_scope": (
+            "trusted_local_enginecore_worker_callable_ipc"
+            if config.vllm_allow_insecure_serialization
+            else None
+        ),
+        "vllm_initial_sync_receipts": initial_vllm_receipts,
         "excluded_test_example_ids": sorted(excluded_test_ids),
         "python": platform.python_version(),
         "torch": torch.__version__,
@@ -817,6 +1359,7 @@ def run_gsm8k_benchmark(
         "gpu": torch.cuda.get_device_name(bundle.device),
         "hostname": platform.node(),
         "pid": os.getpid(),
+        **_model_runtime_metadata(bundle, config),
     }
     (output / "metadata.json").write_text(
         json.dumps(metadata, indent=2, sort_keys=True) + "\n",
@@ -838,5 +1381,7 @@ def run_gsm8k_benchmark(
                 initial_val_metrics,
                 initial_val_samples,
                 output,
+                initial_evaluation_seconds=initial_evaluation_seconds,
+                rollout_policy=rollout_policy,
             )
     return output

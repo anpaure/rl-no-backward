@@ -1,0 +1,90 @@
+[
+  {
+    "example_id": "6308f59093cd19d27df0",
+    "question": "Joy fosters dogs.  The mom foster dog eats 1.5 cups of food, three times a day.  The puppies each eat 1/2 cup of food, twice a day.  There are 5 puppies.  How much food will Joy need for the next 6 days?",
+    "reference_answer": "57",
+    "predicted_answer": "6",
+    "completion": "To determine how much food Joy will need for the next 6 days, we need to calculate the daily food consumption for both the mom dog and the puppies, and then multiply by the number of days.\n\nFirst, let's calculate the daily food consumption for the mom dog:\n- The mom dog eats 1.5 cups of food three times a day.\n- Daily food consumption for the mom dog = 1.5 cups/meal * 3 meals/day = 4.5 cups/day.\n\nNext, let's calculate the daily food consumption for the puppies:\n- Each puppy eats 0.5 cups of food twice a day.\n- Daily food consumption for one puppy = 0.5 cups/meal * 2 meals/day = 1 cup/day.\n- Since there are 5 puppies, the total daily food consumption for all puppies = 1 cup/day/puppy * 5 puppies = 5 cups/day.\n\nNow, let's find the total daily food consumption for all the dogs:\n- Total daily food consumption = 4.5 cups/day (mom dog) + 5 cups/day (puppies) = 9.5 cups/day.\n\nFinally, let's calculate the total food consumption for the next 6 days:\n- Total food consumption for 6 days = 9.5 cups/day * 6 days = 57 cups.\n\nTherefore, Joy will need 57 cups of food for the next 6 days.",
+    "exact_reward": 0.0,
+    "shaped_reward": 0.012068965517241384,
+    "response_tokens": 296,
+    "truncated": false
+  },
+  {
+    "example_id": "7a1db0e2ac2b5f50c1dc",
+    "question": "Sebastian bought art exhibit tickets for his parents and himself.  Tickets were $44 per person.  He was also charged an $18 service fee for the online transaction.  What is the total amount he paid for the tickets?",
+    "reference_answer": "150",
+    "predicted_answer": "150",
+    "completion": "To find the total amount Sebastian paid for the tickets, we need to calculate the cost of the tickets for his parents and himself, and then add the service fee.\n\n1. **Calculate the cost of the tickets for Sebastian and his parents:**\n   - Each ticket costs $44.\n   - Sebastian and his parents are 3 people in total.\n   - Therefore, the total cost for the tickets is \\( 44 \\times 3 \\).\n\n2. **Calculate the total cost of the tickets:**\n   \\[\n   44 \\times 3 = 132\n   \\]\n\n3. **Add the service fee:**\n   - The service fee is $18.\n   - Therefore, the total amount Sebastian paid is \\( 132 + 18 \\).\n\n4. **Calculate the final total amount:**\n   \\[\n   132 + 18 = 150\n   \\]\n\n**Final answer:** $150",
+    "exact_reward": 1.0,
+    "shaped_reward": 1.0,
+    "response_tokens": 204,
+    "truncated": false
+  },
+  {
+    "example_id": "04c295d6588de259bc90",
+    "question": "Kim takes 4 classes in school that last 2 hours each.  She drops 1 class.  How many hours of classes does she have now have per day?",
+    "reference_answer": "6",
+    "predicted_answer": "6",
+    "completion": "Kim originally has 4 classes, each lasting 2 hours, so she has 4 * 2 = 8 hours of classes per day.\nAfter dropping 1 class, she now has 4 - 1 = 3 classes.\nSo she now has 3 * 2 = 6 hours of classes per day.\n\nFinal answer: 6",
+    "exact_reward": 1.0,
+    "shaped_reward": 1.0,
+    "response_tokens": 73,
+    "truncated": false
+  },
+  {
+    "example_id": "122834e9623ef5961308",
+    "question": "Maria goes to the coffee shop 2 times a day. Every time she goes to the coffee shop, she orders 3 cups of coffee. How many cups of coffee does she order per day?",
+    "reference_answer": "6",
+    "predicted_answer": "6",
+    "completion": "To find out how many cups of coffee Maria orders per day, we need to multiply the number of times she goes to the coffee shop by the number of cups she orders each time.\n\nMaria goes to the coffee shop 2 times a day and orders 3 cups each time. So, we calculate:\n\n\\[ 2 \\text{ times/day} \\times 3 \\text{ cups/time} = 6 \\text{ cups/day} \\]\n\nTherefore, Maria orders 6 cups of coffee per day.",
+    "exact_reward": 1.0,
+    "shaped_reward": 1.0,
+    "response_tokens": 104,
+    "truncated": false
+  },
+  {
+    "example_id": "0d8c14e603af9f29975d",
+    "question": "Elliott drew a right-angle triangle on his book. It had a base of 4 inches, a height of 3 inches and a certain length of the hypotenuse. What was the length of the perimeter of the triangle that he drew?",
+    "reference_answer": "12",
+    "predicted_answer": "12",
+    "completion": "To find the perimeter of the right-angle triangle, we need to calculate the length of the hypotenuse first. We can use the Pythagorean theorem for this purpose, which states that in a right-angle triangle, the square of the length of the hypotenuse (c) is equal to the sum of the squares of the lengths of the other two sides (a and b). The formula is:\n\n\\[ c^2 = a^2 + b^2 \\]\n\nGiven:\n- Base (a) = 4 inches\n- Height (b) = 3 inches\n\nPlugging in the values:\n\n\\[ c^2 = 4^2 + 3^2 \\]\n\\[ c^2 = 16 + 9 \\]\n\\[ c^2 = 25 \\]\n\nTaking the square root of both sides to find c:\n\n\\[ c = \\sqrt{25} \\]\n\\[ c = 5 \\]\n\nSo, the length of the hypotenuse is 5 inches.\n\nNow, to find the perimeter, we add the lengths of all three sides:\n\n\\[ \\text{Perimeter} = \\text{Base} + \\text{Height} + \\text{Hypotenuse} \\]\n\\[ \\text{Perimeter} = 4 + 3 + 5 \\]\n\\[ \\text{Perimeter} = 12 \\]\n\nTherefore, the length of the perimeter of the triangle that Elliott drew is 12 inches.",
+    "exact_reward": 1.0,
+    "shaped_reward": 1.0,
+    "response_tokens": 303,
+    "truncated": false
+  },
+  {
+    "example_id": "9149d35f0536955fcbf4",
+    "question": "Barbara wants to save up for a new wristwatch that costs $100. Her parents give her an allowance of $5 a week and she can either save it all up for the watch or spend it as she wishes. 10 weeks pass and due to spending some of her money on ice cream, Barbara currently only has $20. How many more weeks does she need to save for a watch if she stops spending on other things right now?",
+    "reference_answer": "16",
+    "predicted_answer": "16",
+    "completion": "Barbara needs to save $100 - $20 = $80 more for the watch. She saves $5 a week, so she needs 80 / 5 = 16 more weeks to save for the watch. Final answer: 16.",
+    "exact_reward": 1.0,
+    "shaped_reward": 1.0,
+    "response_tokens": 58,
+    "truncated": false
+  },
+  {
+    "example_id": "8038b27dac316fba8610",
+    "question": "A couple agreed to split their expenses equally, including the salary of their house help. While doing her job, the house help had an accident; thus, she underwent a medical procedure which cost her $128. The couple decided to pay half of the medical expenses and the other half will be deducted from her $160 salary. If the husband paid for the entire half of the hospital bill, how much does he still need to pay so that they split the expenses for the house help equally?",
+    "reference_answer": "48",
+    "predicted_answer": "32",
+    "completion": "To solve this problem, let's break it down step by step:\n\n1. **Total Medical Expenses**: The medical procedure cost $128.\n\n2. **Split of Expenses**: The couple decided to pay half of the medical expenses. Therefore, each person would pay:\n   \\[\n   \\frac{128}{2} = 64\n   \\]\n\n3. **House Help's Salary**: The house help's salary is $160.\n\n4. **House Help's Contribution**: The house help will contribute $64 towards the medical expenses.\n\n5. **Remaining Contribution**: The remaining amount that the house help needs to pay is:\n   \\[\n   160 - 64 = 96\n   \\]\n\n6. **Husband's Contribution**: The husband will pay for the entire half of the medical expenses, which is $64.\n\n7. **Remaining Amount for Husband**: The remaining amount that the husband needs to pay is:\n   \\[\n   96 - 64 = 32\n   \\]\n\nTherefore, the husband still needs to pay **$32** so that they split the expenses for the house help equally.",
+    "exact_reward": 0.0,
+    "shaped_reward": 0.06734693877551022,
+    "response_tokens": 245,
+    "truncated": false
+  },
+  {
+    "example_id": "b4abcdb39d78d348d5dd",
+    "question": "Alexander Bought 22 more joggers than Tyson. Christopher bought twenty times as many joggers as Tyson. If Christopher bought 80 joggers, how many more joggers does Christopher buy than Alexander?",
+    "reference_answer": "54",
+    "predicted_answer": "54",
+    "completion": "Let's denote the number of joggers Tyson bought as \\( T \\).\n\nAccording to the problem, Christopher bought twenty times as many joggers as Tyson, which can be expressed as:\n\\[ 20T = 80 \\]\n\nTo find the number of joggers Tyson bought, we solve for \\( T \\):\n\\[ T = \\frac{80}{20} = 4 \\]\n\nAlexander bought 22 more joggers than Tyson, so Alexander bought:\n\\[ T + 22 = 4 + 22 = 26 \\]\n\nNow, we need to find out how many more joggers Christopher bought than Alexander. Christopher bought 80 joggers, and Alexander bought 26 joggers, so the difference is:\n\\[ 80 - 26 = 54 \\]\n\nTherefore, Christopher bought 54 more joggers than Alexander.",
+    "exact_reward": 1.0,
+    "shaped_reward": 1.0,
+    "response_tokens": 183,
+    "truncated": false
+  }
+]

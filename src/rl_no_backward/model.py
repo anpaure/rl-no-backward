@@ -9,10 +9,19 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
+from importlib.metadata import PackageNotFoundError, version
 
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
+
+ATTENTION_IMPLEMENTATIONS: tuple[str, ...] = ("eager", "sdpa", "flash_attention_2")
+TORCH_COMPILE_MODES: tuple[str, ...] = (
+    "default",
+    "reduce-overhead",
+    "max-autotune",
+    "max-autotune-no-cudagraphs",
+)
 
 
 class ResidualCoreAdapter(nn.Module):
@@ -174,6 +183,85 @@ def _candidate_ids(tokenizer: object, candidates: Sequence[str]) -> list[int]:
     return ids
 
 
+def validate_attention_implementation(attention_implementation: str) -> None:
+    if not isinstance(attention_implementation, str) or (
+        attention_implementation not in ATTENTION_IMPLEMENTATIONS
+    ):
+        raise ValueError(
+            f"attention_implementation must be one of {', '.join(ATTENTION_IMPLEMENTATIONS)}"
+        )
+
+
+def validate_compile_mode(compile_model_forward_mode: str) -> None:
+    if not isinstance(compile_model_forward_mode, str) or (
+        compile_model_forward_mode not in TORCH_COMPILE_MODES
+    ):
+        raise ValueError(
+            f"compile_model_forward_mode must be one of {', '.join(TORCH_COMPILE_MODES)}"
+        )
+
+
+def resolved_attention_implementation(model: nn.Module) -> str | None:
+    """Return the attention backend that Transformers resolved for ``model``."""
+
+    config = getattr(model, "config", None)
+    for attribute in ("_attn_implementation", "_attn_implementation_internal"):
+        resolved = getattr(config, attribute, None)
+        if resolved:
+            return str(resolved)
+    return None
+
+
+def installed_flash_attn_version() -> str | None:
+    """Return the optional FlashAttention package version without importing it."""
+
+    try:
+        return version("flash-attn")
+    except PackageNotFoundError:
+        return None
+
+
+def model_forward_is_compiled(model: nn.Module) -> bool:
+    return bool(getattr(model, "_rl_no_backward_forward_compiled", False))
+
+
+def compile_model_forward_in_place(model: nn.Module, mode: str = "default") -> None:
+    """Compile only ``model.forward`` while preserving the module parameter layout.
+
+    Passing the entire module to :func:`torch.compile` wraps it in an
+    ``OptimizedModule`` and prefixes parameter names with ``_orig_mod``.  The
+    optimizer and vLLM synchronization contracts use stable adapter names, so
+    this helper compiles the bound forward callable instead and leaves the
+    owning module intact.  Compilation remains lazy until the first model call.
+    """
+
+    validate_compile_mode(mode)
+    if model_forward_is_compiled(model):
+        existing_mode = getattr(model, "_rl_no_backward_forward_compile_mode", None)
+        if existing_mode != mode:
+            raise ValueError(f"model forward is already compiled with mode {existing_mode!r}")
+        return
+
+    parameter_names = tuple(name for name, _ in model.named_parameters())
+    original_forward = model.forward
+    # Autoregressive generation and teacher forcing exercise many sequence
+    # lengths. Dynamic shapes avoid one specialization/recompile per length.
+    compiled_forward = torch.compile(
+        original_forward,
+        mode=mode,
+        fullgraph=False,
+        dynamic=True,
+    )
+    if not callable(compiled_forward):
+        raise TypeError("torch.compile did not return a callable forward")
+    model.forward = compiled_forward  # type: ignore[method-assign]
+    if tuple(name for name, _ in model.named_parameters()) != parameter_names:
+        model.forward = original_forward  # type: ignore[method-assign]
+        raise RuntimeError("compiling model.forward changed parameter names")
+    model._rl_no_backward_forward_compiled = True
+    model._rl_no_backward_forward_compile_mode = mode
+
+
 def load_model_bundle(
     model_name: str,
     calibration_prompts: Sequence[str],
@@ -184,11 +272,18 @@ def load_model_bundle(
     dtype: str = "bfloat16",
     device: str = "cuda",
     revision: str | None = None,
+    attention_implementation: str = "eager",
+    compile_model_forward: bool = False,
+    compile_model_forward_mode: str = "default",
 ) -> ModelBundle:
     """Load a frozen causal LM, calibrate bases, and insert residual-core adapters."""
 
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
+    validate_attention_implementation(attention_implementation)
+    if not isinstance(compile_model_forward, bool):
+        raise TypeError("compile_model_forward must be boolean")
+    validate_compile_mode(compile_model_forward_mode)
     target_device = torch.device(device)
     torch_dtype = getattr(torch, dtype)
     tokenizer = AutoTokenizer.from_pretrained(model_name, revision=revision)
@@ -200,9 +295,7 @@ def load_model_bundle(
         model_name,
         revision=revision,
         torch_dtype=torch_dtype,
-        # Eager attention avoids cuDNN-SDPA planner failures observed on the
-        # remote H100 software stack for short, heavily padded prompt batches.
-        attn_implementation="eager",
+        attn_implementation=attention_implementation,
     ).to(target_device)
     model.eval()
     model.requires_grad_(False)
@@ -232,6 +325,14 @@ def load_model_bundle(
         raise RuntimeError(f"expected {adapter_layers} adapter cores, found {adapter_names}")
     for name, parameter in model.named_parameters():
         parameter.requires_grad_(name in adapter_names)
+
+    if compile_model_forward:
+        compile_model_forward_in_place(model, compile_model_forward_mode)
+        compiled_adapter_names = [
+            name for name, _parameter in model.named_parameters() if name.endswith("adapter.core")
+        ]
+        if compiled_adapter_names != adapter_names:
+            raise RuntimeError("compiling model.forward changed adapter parameter names")
 
     ids = torch.tensor(_candidate_ids(tokenizer, candidates), device=target_device)
     return ModelBundle(

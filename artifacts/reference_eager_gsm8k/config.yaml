@@ -1,0 +1,49 @@
+model_name: Qwen/Qwen2.5-1.5B-Instruct
+model_revision: 989aa7980e4cf806f80c7fef2b1adb7bc71aa306
+dataset_revision: 740312add88f781978c0658806c59bc2815b9866
+dtype: bfloat16
+device: cuda
+adapter_rank: 8
+adapter_layers: 4
+adapter_scale: 1.0
+train_size: 512
+val_size: 96
+test_size: 256
+run_test_evaluation: true
+test_exclusion_metadata: artifacts/pilot_gsm8k_1p5b/metadata.json
+subset_seed: 314159
+min_reasoning_lines: 0
+max_reasoning_lines: 1000
+max_answer_magnitude: 1000000000000000000
+methods: [base, bp_grpo, fo_pg, fo_npg, focus_npg]
+seeds: [0, 1, 2]
+steps: 300
+batch_size: 2
+group_size: 8
+max_prompt_tokens: 256
+max_new_tokens: 512
+sampling_temperature: 0.8
+scoring_micro_batch_size: 4
+eval_interval: 50
+eval_batch_size: 8
+numeric_shaping_weight: 0.1
+calibration_examples: 64
+wandb_project: rl-no-backward
+wandb_mode: offline
+backprop:
+  learning_rate: 0.001
+  epochs_per_rollout: 1
+  clip_epsilon: 0.2
+  max_grad_norm: 1.0
+  scoring_micro_batch_size: 4
+forward:
+  directions: 8
+  finite_difference_mu: 2.0
+  fisher_damping: 0.2
+  kl_budget: 0.001
+  clip_epsilon: 0.2
+  max_step_norm: 0.15
+  line_search_steps: 10
+  active_rank: 4
+  history_size: 12
+  scoring_micro_batch_size: 4

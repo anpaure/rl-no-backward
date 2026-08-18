@@ -27,6 +27,9 @@ dev = ["pytest>=8.0", "ruff>=0.9"]
 [project.scripts]
 rl-no-backward = "rl_no_backward.cli:main"
 
+[project.entry-points."vllm.general_plugins"]
+rl_no_backward_residual_qwen = "rl_no_backward.vllm_plugin:register_residual_qwen_model"
+
 [tool.setuptools]
 package-dir = {"" = "src"}
 

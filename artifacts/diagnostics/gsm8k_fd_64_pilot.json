@@ -1,0 +1,348 @@
+{
+  "dataset": {
+    "calibration_example_ids": [
+      "94cf7cbe2110cd2344e8",
+      "429894ce2eec986ca9c7",
+      "5dc175a659e890634809",
+      "8eddc932216d1aeb749d",
+      "ce319611b51823c1e53a",
+      "88990a274bd3304585ef",
+      "36c4bc6f373e779b8425",
+      "0cf70f39fdea4345f38c"
+    ],
+    "config": "main",
+    "id": "openai/gsm8k",
+    "official_train_examples": 7473,
+    "official_train_only": true,
+    "rollout_example_ids": [
+      "4929d92bfd92d94c9948",
+      "bf00b4ef7b6f098480cb"
+    ],
+    "selection_seed": 2026,
+    "split": "train"
+  },
+  "diagnostic": "real_model_gsm8k_projected_finite_difference",
+  "elapsed_seconds": 11.482449896866456,
+  "environment": {
+    "cuda_runtime": "13.0",
+    "gpu": "NVIDIA H100 PCIe",
+    "hostname": "arboghast",
+    "python": "3.12.3",
+    "torch": "2.13.0+cu130"
+  },
+  "exact_backprop_oracle": {
+    "backward_calls": 1,
+    "clip_epsilon": 0.2,
+    "gradient_l2_norm": 0.025900037959218025,
+    "objective": "length-normalized token-clipped GRPO surrogate at policy center",
+    "optimizer_steps": 0,
+    "parameters_unchanged_after_backward": true,
+    "projected_gradient_coordinates": [
+      -0.001316326903179288,
+      0.0003700635861605406,
+      0.0004902007640339434,
+      -0.002588842995464802
+    ],
+    "surrogate_value": -7.450580596923828e-09
+  },
+  "finite_difference": {
+    "best_mu_by_projected_relative_l2_error": 2.0,
+    "directions": 4,
+    "mus": [
+      0.25,
+      0.5,
+      1.0,
+      2.0
+    ],
+    "results": [
+      {
+        "agreement_with_exact_projected_gradient": {
+          "absolute_l2_error": 0.0006991097014811286,
+          "cosine_similarity": 0.9792790884422322,
+          "estimate_l2_norm": 0.0032638634488970576,
+          "estimate_nonzero": true,
+          "reference_l2_norm": 0.0029685128293578593,
+          "reference_nonzero": true,
+          "relative_l2_error": 0.23550839820098002
+        },
+        "agreement_with_full_backprop_gradient": {
+          "absolute_l2_error": 0.025738855094147892,
+          "cosine_similarity": 0.11223932153136276,
+          "estimate_l2_norm": 0.0032638635645495673,
+          "estimate_nonzero": true,
+          "reference_l2_norm": 0.025900038159200865,
+          "reference_nonzero": true,
+          "relative_l2_error": 0.9937767248039473
+        },
+        "fisher": {
+          "correct_token_fisher_trace": 0.08596487139348596,
+          "correct_trace_nonzero": true,
+          "legacy_completion_outer_fisher_trace": 0.001960775279596927,
+          "legacy_completion_score_normalization": "mean_token_score",
+          "legacy_to_correct_trace_ratio": 0.022809029407162073
+        },
+        "mu": 0.25,
+        "policy_evaluations": 8,
+        "projected_gradient_coordinates": [
+          -0.0017123081488534808,
+          -1.693904778221622e-05,
+          0.00010685110464692116,
+          -0.0027765268459916115
+        ],
+        "scored_tokens": 4096,
+        "teacher_forced_examples": 64
+      },
+      {
+        "agreement_with_exact_projected_gradient": {
+          "absolute_l2_error": 0.0014948546777021887,
+          "cosine_similarity": 0.8860965040406029,
+          "estimate_l2_norm": 0.0020460366001786674,
+          "estimate_nonzero": true,
+          "reference_l2_norm": 0.0029685128293578593,
+          "reference_nonzero": true,
+          "relative_l2_error": 0.5035702264509168
+        },
+        "agreement_with_full_backprop_gradient": {
+          "absolute_l2_error": 0.025772747186012687,
+          "cosine_similarity": 0.1015592768927224,
+          "estimate_l2_norm": 0.0020460365732199825,
+          "estimate_nonzero": true,
+          "reference_l2_norm": 0.025900038159200865,
+          "reference_nonzero": true,
+          "relative_l2_error": 0.9950852978514644
+        },
+        "fisher": {
+          "correct_token_fisher_trace": 0.059995101899239955,
+          "correct_trace_nonzero": true,
+          "legacy_completion_outer_fisher_trace": 0.0011549184954272596,
+          "legacy_completion_score_normalization": "mean_token_score",
+          "legacy_to_correct_trace_ratio": 0.01925021308184311
+        },
+        "mu": 0.5,
+        "policy_evaluations": 8,
+        "projected_gradient_coordinates": [
+          -0.0005694931605830789,
+          -0.00022865767823532224,
+          0.0010972346644848585,
+          -0.0016142289387062192
+        ],
+        "scored_tokens": 4096,
+        "teacher_forced_examples": 64
+      },
+      {
+        "agreement_with_exact_projected_gradient": {
+          "absolute_l2_error": 0.00038742691138447344,
+          "cosine_similarity": 0.9918412892644197,
+          "estimate_l2_norm": 0.0028612517426639993,
+          "estimate_nonzero": true,
+          "reference_l2_norm": 0.0029685128293578593,
+          "reference_nonzero": true,
+          "relative_l2_error": 0.13051212295696246
+        },
+        "agreement_with_full_backprop_gradient": {
+          "absolute_l2_error": 0.025732275589774572,
+          "cosine_similarity": 0.11367912719308709,
+          "estimate_l2_norm": 0.0028612518057309893,
+          "estimate_nonzero": true,
+          "reference_l2_norm": 0.025900038159200865,
+          "reference_nonzero": true,
+          "relative_l2_error": 0.9935226902603348
+        },
+        "fisher": {
+          "correct_token_fisher_trace": 0.05453744191602716,
+          "correct_trace_nonzero": true,
+          "legacy_completion_outer_fisher_trace": 0.0012611658964765404,
+          "legacy_completion_score_normalization": "mean_token_score",
+          "legacy_to_correct_trace_ratio": 0.023124771756225623
+        },
+        "mu": 1.0,
+        "policy_evaluations": 8,
+        "projected_gradient_coordinates": [
+          -0.0011758820619434118,
+          2.763919474091381e-05,
+          0.00037591971340589225,
+          -0.0025810818187892437
+        ],
+        "scored_tokens": 4096,
+        "teacher_forced_examples": 64
+      },
+      {
+        "agreement_with_exact_projected_gradient": {
+          "absolute_l2_error": 0.00010603410243471987,
+          "cosine_similarity": 0.9994650115725705,
+          "estimate_l2_norm": 0.0029242979131560605,
+          "estimate_nonzero": true,
+          "reference_l2_norm": 0.0029685128293578593,
+          "reference_nonzero": true,
+          "relative_l2_error": 0.0357196038993225
+        },
+        "agreement_with_full_backprop_gradient": {
+          "absolute_l2_error": 0.025729577358698717,
+          "cosine_similarity": 0.11455291142977607,
+          "estimate_l2_norm": 0.0029242979872136305,
+          "estimate_nonzero": true,
+          "reference_l2_norm": 0.025900038159200865,
+          "reference_nonzero": true,
+          "relative_l2_error": 0.9934185116078066
+        },
+        "fisher": {
+          "correct_token_fisher_trace": 0.05280611300588367,
+          "correct_trace_nonzero": true,
+          "legacy_completion_outer_fisher_trace": 0.0012165343320456948,
+          "legacy_completion_score_normalization": "mean_token_score",
+          "legacy_to_correct_trace_ratio": 0.02303775572176934
+        },
+        "mu": 2.0,
+        "policy_evaluations": 8,
+        "projected_gradient_coordinates": [
+          -0.0012212996371090412,
+          0.0003507088404148817,
+          0.0004478367045521736,
+          -0.002595455851405859
+        ],
+        "scored_tokens": 4096,
+        "teacher_forced_examples": 64
+      }
+    ]
+  },
+  "integrity": {
+    "parameters_unchanged_after_all_probes": true,
+    "source_audit_passed": true
+  },
+  "model": {
+    "adapter_layers": 4,
+    "adapter_names": [
+      "model.layers.24.adapter.core",
+      "model.layers.25.adapter.core",
+      "model.layers.26.adapter.core",
+      "model.layers.27.adapter.core"
+    ],
+    "adapter_parameter_count": 256,
+    "adapter_rank": 8,
+    "device": "cuda",
+    "dtype": "bfloat16",
+    "name": "Qwen/Qwen2.5-1.5B-Instruct"
+  },
+  "passed": true,
+  "purpose": "Backprop is used once as a non-updating oracle; the compared production optimizer path remains forward-only.",
+  "random_subspace": {
+    "basis_orthonormality_max_error": 1.6117505508006502e-07,
+    "captured_squared_norm_fraction": 0.013136422763831703,
+    "directions": 4,
+    "expected_isotropic_squared_norm_fraction": 0.015625,
+    "full_gradient_l2_norm": 0.025900038159200865,
+    "parameter_count": 256,
+    "projected_gradient_l2_norm": 0.0029685130486980394
+  },
+  "rollout": {
+    "batch_size": 2,
+    "environment_samples": 8,
+    "group_size": 4,
+    "max_new_tokens": 64,
+    "numeric_shaping_weight": 0.1,
+    "reward_statistics": {
+      "exact_reward_rate": 0.125,
+      "group_size": 4,
+      "nonzero_reward_fraction": 1.0,
+      "prompt_groups": 2,
+      "reward_max": 1.0,
+      "reward_mean": 0.15992239576007705,
+      "reward_min": 0.0006651884759776294,
+      "reward_std_population": 0.31865571917482466,
+      "samples": 8,
+      "zero_advantage_group_fraction": 0.0,
+      "zero_advantage_groups": 0,
+      "zero_reward_fraction": 0.0
+    },
+    "samples": [
+      {
+        "completions": [
+          {
+            "exact_reward": 0.0,
+            "extracted_answer": "100",
+            "group_index": 0,
+            "response_tokens": 64,
+            "shaped_reward": 0.022394677624106407,
+            "text": "Let's break down the increase in cows over the next two years:\n\n1. **After one year**\n   - The initial number of cows is 200.\n   - The number increases by half of the current number: \\( \\frac{200}{2} = 100 \\).\n\n**"
+          },
+          {
+            "exact_reward": 0.0,
+            "extracted_answer": "2",
+            "group_index": 1,
+            "response_tokens": 64,
+            "shaped_reward": 0.0006651884759776294,
+            "text": "To solve this grade-school level mathematics problem, we'll break it down into steps:\n\n1. **Initial Condition**: \n   - Happy Cattle Ranch starts with 200 cows.\n\n2. **First Year Increase**:\n   - In the first year, the number of new calves born equals half the current number"
+          },
+          {
+            "exact_reward": 0.0,
+            "extracted_answer": "250",
+            "group_index": 2,
+            "response_tokens": 64,
+            "shaped_reward": 0.05565410107374191,
+            "text": "In the first year, the number of cows increases by half the current number. Half of 200 is 100/2 = 50.\nIf the ride, the original number of cows and the increase are added together we get 200+50=250 cows for"
+          },
+          {
+            "exact_reward": 0.0,
+            "extracted_answer": "2",
+            "group_index": 3,
+            "response_tokens": 64,
+            "shaped_reward": 0.0006651884759776294,
+            "text": "To solve this problem, let's break it down step-by-step:\n\n1. **Initial Condition**: The ranch has 200 cows.\n   \n2. **First Year**:\n   - After one year, the amount of offspring from the mothers increases the herd by half the current population.\n   - Number of new"
+          }
+        ],
+        "example_id": "4929d92bfd92d94c9948",
+        "question": "Happy Cattle Ranch is home to 200 cows. Every year, the mother cows have enough calves that the number of cows the rancher owns rises by half the number of cows living on the ranch. If the rancher does not buy or sell any cows, how many cows will the rancher own on Happy Cattle Ranch in two years?",
+        "reference_answer": "450",
+        "source_index": 3294
+      },
+      {
+        "completions": [
+          {
+            "exact_reward": 0.0,
+            "extracted_answer": "8",
+            "group_index": 0,
+            "response_tokens": 64,
+            "shaped_reward": 0.06666667014360428,
+            "text": "First find the amount of paint Mike uses: 3 square feet + 2 square feet = 5 square feet\nThen add the amounts used by Mary and Mike to find the total area they've painted: 3 square feet + 5 square feet = 8 square feet\nSubtract the total area painted from"
+          },
+          {
+            "exact_reward": 1.0,
+            "extracted_answer": "5",
+            "group_index": 1,
+            "response_tokens": 64,
+            "shaped_reward": 1.0,
+            "text": "First, we determine the amount of paint Mike used:\n\n\\[ \\text{Mike's paint} = \\text{Mary's paint} + 2 \\]\n\\[ \\text{Mike's paint} = 3 + 2 \\]\n\\[ \\text{Mike's paint} = 5 \\]\n\nNext, we"
+          },
+          {
+            "exact_reward": 0.0,
+            "extracted_answer": "8",
+            "group_index": 2,
+            "response_tokens": 64,
+            "shaped_reward": 0.06666667014360428,
+            "text": "First find how much paint Mike uses to paint the castle: 3 square feet + 2 square feet = 5 square feet\nThen add the amount of paint each person already used to find the total amount used so far: 5 square feet + 3 square feet = 8 square feet\nFinally, subtract"
+          },
+          {
+            "exact_reward": 0.0,
+            "extracted_answer": "8",
+            "group_index": 3,
+            "response_tokens": 64,
+            "shaped_reward": 0.06666667014360428,
+            "text": "First find how much paint Mike used for his castle: 3 square feet + 2 square feet = 5 square feet\nThen add the amount they used individually to find total amount painted: 5 square feet + 3 square feet = 8 square feet\n\nNow subtract the amount used by Mary and Mike from"
+          }
+        ],
+        "example_id": "bf00b4ef7b6f098480cb",
+        "question": "Mary and Mike are sharing a jar of paint. Mary paints a dragon using 3 square feet worth of paint. Mike paints a castle using 2 square feet more paint than Mary used on her dragon. They both then work together to paint the biggest sun possible. If there was originally enough paint in the jar to cover 13 square feet, how many square feet of paint can be used to paint the sun?",
+        "reference_answer": "5",
+        "source_index": 1604
+      }
+    ],
+    "sampling_temperature": 0.8,
+    "valid_response_tokens": 512
+  },
+  "schema_version": 1,
+  "source_audit": {
+    "passed": true,
+    "source_path": "/home/amodo/rl-no-backward/src/rl_no_backward/sequence_forward_only.py",
+    "violations": []
+  }
+}

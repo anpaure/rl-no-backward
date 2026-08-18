@@ -117,6 +117,9 @@ def _write_validation_and_test_run(root: Path) -> None:
             "step": 10,
             "environment_samples": 100,
             "wall_time_seconds": 5.0,
+            "forward_calls": 5,
+            "full_prefix_calls": 1,
+            "suffix_calls": 4,
             "val_accuracy": 0.4,
             "val_exact_reward": 0.4,
             "val_shaped_reward": 0.5,
@@ -171,6 +174,63 @@ def test_recursive_loader_normalises_controlled_and_gsm8k_metrics(tmp_path: Path
     ]
     assert set(final_forward["environment_samples"]) == {256.0}
     assert set(final_forward["forward_calls"]) == {22.0}
+
+
+def test_loader_and_summary_preserve_phase_timing_and_allocator_peaks(tmp_path: Path) -> None:
+    path = tmp_path / "raw" / "fo_pg_seed0.jsonl"
+    path.parent.mkdir(parents=True)
+    records = [
+        {
+            "kind": "train_step",
+            "method": "fo_pg",
+            "seed": 0,
+            "step": 1,
+            "environment_samples": 8,
+            "wall_time_seconds": 5.0,
+            "forward_calls": 5,
+            "full_prefix_calls": 1,
+            "suffix_calls": 4,
+            "rollout_and_old_score_seconds": 1.25,
+            "optimizer_seconds": 2.5,
+            "peak_gpu_memory_allocated_bytes": 3 * 2**30,
+            "peak_gpu_memory_reserved_bytes": 4 * 2**30,
+        },
+        {
+            "kind": "evaluation",
+            "method": "fo_pg",
+            "seed": 0,
+            "step": 1,
+            "environment_samples": 8,
+            "wall_time_seconds": 7.0,
+            "forward_calls": 5,
+            "full_prefix_calls": 1,
+            "suffix_calls": 4,
+            "evaluation_seconds": 2.0,
+            "peak_gpu_memory_allocated_bytes": 3 * 2**30,
+            "peak_gpu_memory_reserved_bytes": 4 * 2**30,
+            "val_accuracy": 0.5,
+        },
+    ]
+    path.write_text("".join(json.dumps(record) + "\n" for record in records))
+
+    frame = load_results(tmp_path)
+    train = frame[frame["kind"] == "train_step"].iloc[0]
+    assert train["rollout_and_old_score_seconds"] == pytest.approx(1.25)
+    assert train["optimizer_seconds"] == pytest.approx(2.5)
+    assert train["full_prefix_calls"] == 1
+    assert train["suffix_calls"] == 4
+    assert train["peak_gpu_memory_bytes"] == 3 * 2**30
+    assert train["peak_gpu_memory_allocated_bytes"] == 3 * 2**30
+    assert train["peak_gpu_memory_reserved_bytes"] == 4 * 2**30
+
+    summary = summarize_results(frame, bootstrap_samples=10)
+    assert summary["total_rollout_and_old_score_seconds_mean"].item() == pytest.approx(1.25)
+    assert summary["total_optimizer_seconds_mean"].item() == pytest.approx(2.5)
+    assert summary["total_evaluation_seconds_mean"].item() == pytest.approx(2.0)
+    assert summary["final_full_prefix_calls_mean"].item() == 1
+    assert summary["final_suffix_calls_mean"].item() == 4
+    assert summary["peak_gpu_memory_allocated_bytes_mean"].item() == 3 * 2**30
+    assert summary["peak_gpu_memory_reserved_bytes_mean"].item() == 4 * 2**30
 
 
 def test_aggregation_and_summary_have_bootstrap_ci_and_auc(tmp_path: Path) -> None:
@@ -254,6 +314,8 @@ def test_plot_results_writes_readable_png_pdf_and_summary(tmp_path: Path) -> Non
     assert list(summary["method"]) == ["bp_grpo", "fo_npg"]
     assert "auc_environment_samples_mean" in summary
     assert "peak_gpu_memory_bytes_mean" in summary
+    assert "peak_gpu_memory_allocated_bytes_mean" in summary
+    assert "peak_gpu_memory_reserved_bytes_mean" in summary
 
 
 def test_cli_main_accepts_bootstrap_controls(tmp_path: Path) -> None:
