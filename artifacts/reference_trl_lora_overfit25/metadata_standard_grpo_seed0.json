@@ -1,0 +1,1036 @@
+{
+  "schema_version": 1,
+  "method": "standard_grpo",
+  "trainer": "trl.GRPOTrainer",
+  "config": {
+    "model_name": "Qwen/Qwen2.5-1.5B-Instruct",
+    "model_revision": "989aa7980e4cf806f80c7fef2b1adb7bc71aa306",
+    "dataset_revision": "740312add88f781978c0658806c59bc2815b9866",
+    "dtype": "bfloat16",
+    "attention_implementation": "flash_attention_2",
+    "train_size": 8,
+    "val_size": 16,
+    "test_size": 0,
+    "run_test_evaluation": false,
+    "test_exclusion_metadata": "configs/gsm8k_touched_test_exclusions.json",
+    "subset_seed": 314159,
+    "seeds": [
+      0
+    ],
+    "steps": 25,
+    "prompts_per_update": 8,
+    "group_size": 8,
+    "per_device_train_batch_size": 4,
+    "gradient_accumulation_steps": 16,
+    "max_prompt_tokens": 256,
+    "max_completion_tokens": 512,
+    "sampling_temperature": 1.0,
+    "learning_rate": 1e-05,
+    "warmup_ratio": 0.0,
+    "epsilon": 0.2,
+    "beta": 0.0,
+    "loss_type": "grpo",
+    "scale_rewards": "group",
+    "num_iterations": 1,
+    "max_grad_norm": 1.0,
+    "eval_interval": 25,
+    "eval_batch_size": 4,
+    "use_vllm": true,
+    "vllm_gpu_memory_utilization": 0.25,
+    "vllm_enable_sleep_mode": false,
+    "vllm_model_impl": "vllm",
+    "wandb_project": "rl-no-backward",
+    "wandb_mode": "offline",
+    "expected_lora_parameter_count": 1089536,
+    "shared_initialization_path_template": "artifacts/shared_initializations/qwen25_1p5b_qv_r8_all28_seed{seed}.pt",
+    "lora": {
+      "rank": 8,
+      "alpha": 16,
+      "dropout": 0.0,
+      "target_modules": [
+        "q_proj",
+        "v_proj"
+      ],
+      "layer_indices": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27
+      ],
+      "bias": "none"
+    }
+  },
+  "seed": 0,
+  "dataset_id": "openai/gsm8k",
+  "dataset_config": "main",
+  "dataset_revision": "740312add88f781978c0658806c59bc2815b9866",
+  "model_name": "Qwen/Qwen2.5-1.5B-Instruct",
+  "model_revision": "989aa7980e4cf806f80c7fef2b1adb7bc71aa306",
+  "resolved_model_snapshot": "/home/amodo/.cache/huggingface/hub/models--Qwen--Qwen2.5-1.5B-Instruct/snapshots/989aa7980e4cf806f80c7fef2b1adb7bc71aa306",
+  "train_example_ids": [
+    "3f3412941f6aa800aa38",
+    "3a506b17c295406202bf",
+    "946eb37ad935a77c4dae",
+    "0a314420413d2f7185b2",
+    "aee0237f01cc5e6ad220",
+    "a9f58665810479b97301",
+    "0d933ff74b552ec597b2",
+    "e00b37d0c6e6fea59e14"
+  ],
+  "val_example_ids": [
+    "6c08eb2bc77b41777021",
+    "01b934beb823ee547924",
+    "bb3e126c985093635c95",
+    "6580a53dcec0cdeb13e9",
+    "3c50854629f9795bf6d0",
+    "87210e0ca90deb5c9e5b",
+    "ebb333fce7cc1e70aa2f",
+    "b6841cd427a4cccffd61",
+    "5c7dca6730e32bb3e58a",
+    "9dfb64633b9a7c195998",
+    "a0119196707ef1560d68",
+    "95a70dd7539c75b93420",
+    "919ef528fcf338572b26",
+    "0e5ddf4d08a9e370fe00",
+    "43b569ad60d074a8bd2a",
+    "4a056e9a9d2a889dce98"
+  ],
+  "test_example_ids": [],
+  "dataset_split_fingerprints": {
+    "train": "7d86e450b170171c4b6b075d2e2655c67198e880e2c96a43e81df58688be2f42",
+    "validation": "37e3a3a5d12adcebadd0f5d56b98d15c4cb05562a3e248c7bb86e65e74f6b8a5",
+    "test": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "lora_parameterization": {
+    "rank": 8,
+    "alpha": 16,
+    "dropout": 0.0,
+    "target_modules": [
+      "q_proj",
+      "v_proj"
+    ],
+    "layer_indices": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27
+    ],
+    "bias": "none"
+  },
+  "adapter_parameter_count": 1089536,
+  "adapter_parameter_layout": {
+    "names": [
+      "base_model.model.model.layers.0.self_attn.q_proj.lora_A.default.weight",
+      "base_model.model.model.layers.0.self_attn.q_proj.lora_B.default.weight",
+      "base_model.model.model.layers.0.self_attn.v_proj.lora_A.default.weight",
+      "base_model.model.model.layers.0.self_attn.v_proj.lora_B.default.weight",
+      "base_model.model.model.layers.1.self_attn.q_proj.lora_A.default.weight",
+      "base_model.model.model.layers.1.self_attn.q_proj.lora_B.default.weight",
+      "base_model.model.model.layers.1.self_attn.v_proj.lora_A.default.weight",
+      "base_model.model.model.layers.1.self_attn.v_proj.lora_B.default.weight",
+      "base_model.model.model.layers.10.self_attn.q_proj.lora_A.default.weight",
+      "base_model.model.model.layers.10.self_attn.q_proj.lora_B.default.weight",
+      "base_model.model.model.layers.10.self_attn.v_proj.lora_A.default.weight",
+      "base_model.model.model.layers.10.self_attn.v_proj.lora_B.default.weight",
+      "base_model.model.model.layers.11.self_attn.q_proj.lora_A.default.weight",
+      "base_model.model.model.layers.11.self_attn.q_proj.lora_B.default.weight",
+      "base_model.model.model.layers.11.self_attn.v_proj.lora_A.default.weight",
+      "base_model.model.model.layers.11.self_attn.v_proj.lora_B.default.weight",
+      "base_model.model.model.layers.12.self_attn.q_proj.lora_A.default.weight",
+      "base_model.model.model.layers.12.self_attn.q_proj.lora_B.default.weight",
+      "base_model.model.model.layers.12.self_attn.v_proj.lora_A.default.weight",
+      "base_model.model.model.layers.12.self_attn.v_proj.lora_B.default.weight",
+      "base_model.model.model.layers.13.self_attn.q_proj.lora_A.default.weight",
+      "base_model.model.model.layers.13.self_attn.q_proj.lora_B.default.weight",
+      "base_model.model.model.layers.13.self_attn.v_proj.lora_A.default.weight",
+      "base_model.model.model.layers.13.self_attn.v_proj.lora_B.default.weight",
+      "base_model.model.model.layers.14.self_attn.q_proj.lora_A.default.weight",
+      "base_model.model.model.layers.14.self_attn.q_proj.lora_B.default.weight",
+      "base_model.model.model.layers.14.self_attn.v_proj.lora_A.default.weight",
+      "base_model.model.model.layers.14.self_attn.v_proj.lora_B.default.weight",
+      "base_model.model.model.layers.15.self_attn.q_proj.lora_A.default.weight",
+      "base_model.model.model.layers.15.self_attn.q_proj.lora_B.default.weight",
+      "base_model.model.model.layers.15.self_attn.v_proj.lora_A.default.weight",
+      "base_model.model.model.layers.15.self_attn.v_proj.lora_B.default.weight",
+      "base_model.model.model.layers.16.self_attn.q_proj.lora_A.default.weight",
+      "base_model.model.model.layers.16.self_attn.q_proj.lora_B.default.weight",
+      "base_model.model.model.layers.16.self_attn.v_proj.lora_A.default.weight",
+      "base_model.model.model.layers.16.self_attn.v_proj.lora_B.default.weight",
+      "base_model.model.model.layers.17.self_attn.q_proj.lora_A.default.weight",
+      "base_model.model.model.layers.17.self_attn.q_proj.lora_B.default.weight",
+      "base_model.model.model.layers.17.self_attn.v_proj.lora_A.default.weight",
+      "base_model.model.model.layers.17.self_attn.v_proj.lora_B.default.weight",
+      "base_model.model.model.layers.18.self_attn.q_proj.lora_A.default.weight",
+      "base_model.model.model.layers.18.self_attn.q_proj.lora_B.default.weight",
+      "base_model.model.model.layers.18.self_attn.v_proj.lora_A.default.weight",
+      "base_model.model.model.layers.18.self_attn.v_proj.lora_B.default.weight",
+      "base_model.model.model.layers.19.self_attn.q_proj.lora_A.default.weight",
+      "base_model.model.model.layers.19.self_attn.q_proj.lora_B.default.weight",
+      "base_model.model.model.layers.19.self_attn.v_proj.lora_A.default.weight",
+      "base_model.model.model.layers.19.self_attn.v_proj.lora_B.default.weight",
+      "base_model.model.model.layers.2.self_attn.q_proj.lora_A.default.weight",
+      "base_model.model.model.layers.2.self_attn.q_proj.lora_B.default.weight",
+      "base_model.model.model.layers.2.self_attn.v_proj.lora_A.default.weight",
+      "base_model.model.model.layers.2.self_attn.v_proj.lora_B.default.weight",
+      "base_model.model.model.layers.20.self_attn.q_proj.lora_A.default.weight",
+      "base_model.model.model.layers.20.self_attn.q_proj.lora_B.default.weight",
+      "base_model.model.model.layers.20.self_attn.v_proj.lora_A.default.weight",
+      "base_model.model.model.layers.20.self_attn.v_proj.lora_B.default.weight",
+      "base_model.model.model.layers.21.self_attn.q_proj.lora_A.default.weight",
+      "base_model.model.model.layers.21.self_attn.q_proj.lora_B.default.weight",
+      "base_model.model.model.layers.21.self_attn.v_proj.lora_A.default.weight",
+      "base_model.model.model.layers.21.self_attn.v_proj.lora_B.default.weight",
+      "base_model.model.model.layers.22.self_attn.q_proj.lora_A.default.weight",
+      "base_model.model.model.layers.22.self_attn.q_proj.lora_B.default.weight",
+      "base_model.model.model.layers.22.self_attn.v_proj.lora_A.default.weight",
+      "base_model.model.model.layers.22.self_attn.v_proj.lora_B.default.weight",
+      "base_model.model.model.layers.23.self_attn.q_proj.lora_A.default.weight",
+      "base_model.model.model.layers.23.self_attn.q_proj.lora_B.default.weight",
+      "base_model.model.model.layers.23.self_attn.v_proj.lora_A.default.weight",
+      "base_model.model.model.layers.23.self_attn.v_proj.lora_B.default.weight",
+      "base_model.model.model.layers.24.self_attn.q_proj.lora_A.default.weight",
+      "base_model.model.model.layers.24.self_attn.q_proj.lora_B.default.weight",
+      "base_model.model.model.layers.24.self_attn.v_proj.lora_A.default.weight",
+      "base_model.model.model.layers.24.self_attn.v_proj.lora_B.default.weight",
+      "base_model.model.model.layers.25.self_attn.q_proj.lora_A.default.weight",
+      "base_model.model.model.layers.25.self_attn.q_proj.lora_B.default.weight",
+      "base_model.model.model.layers.25.self_attn.v_proj.lora_A.default.weight",
+      "base_model.model.model.layers.25.self_attn.v_proj.lora_B.default.weight",
+      "base_model.model.model.layers.26.self_attn.q_proj.lora_A.default.weight",
+      "base_model.model.model.layers.26.self_attn.q_proj.lora_B.default.weight",
+      "base_model.model.model.layers.26.self_attn.v_proj.lora_A.default.weight",
+      "base_model.model.model.layers.26.self_attn.v_proj.lora_B.default.weight",
+      "base_model.model.model.layers.27.self_attn.q_proj.lora_A.default.weight",
+      "base_model.model.model.layers.27.self_attn.q_proj.lora_B.default.weight",
+      "base_model.model.model.layers.27.self_attn.v_proj.lora_A.default.weight",
+      "base_model.model.model.layers.27.self_attn.v_proj.lora_B.default.weight",
+      "base_model.model.model.layers.3.self_attn.q_proj.lora_A.default.weight",
+      "base_model.model.model.layers.3.self_attn.q_proj.lora_B.default.weight",
+      "base_model.model.model.layers.3.self_attn.v_proj.lora_A.default.weight",
+      "base_model.model.model.layers.3.self_attn.v_proj.lora_B.default.weight",
+      "base_model.model.model.layers.4.self_attn.q_proj.lora_A.default.weight",
+      "base_model.model.model.layers.4.self_attn.q_proj.lora_B.default.weight",
+      "base_model.model.model.layers.4.self_attn.v_proj.lora_A.default.weight",
+      "base_model.model.model.layers.4.self_attn.v_proj.lora_B.default.weight",
+      "base_model.model.model.layers.5.self_attn.q_proj.lora_A.default.weight",
+      "base_model.model.model.layers.5.self_attn.q_proj.lora_B.default.weight",
+      "base_model.model.model.layers.5.self_attn.v_proj.lora_A.default.weight",
+      "base_model.model.model.layers.5.self_attn.v_proj.lora_B.default.weight",
+      "base_model.model.model.layers.6.self_attn.q_proj.lora_A.default.weight",
+      "base_model.model.model.layers.6.self_attn.q_proj.lora_B.default.weight",
+      "base_model.model.model.layers.6.self_attn.v_proj.lora_A.default.weight",
+      "base_model.model.model.layers.6.self_attn.v_proj.lora_B.default.weight",
+      "base_model.model.model.layers.7.self_attn.q_proj.lora_A.default.weight",
+      "base_model.model.model.layers.7.self_attn.q_proj.lora_B.default.weight",
+      "base_model.model.model.layers.7.self_attn.v_proj.lora_A.default.weight",
+      "base_model.model.model.layers.7.self_attn.v_proj.lora_B.default.weight",
+      "base_model.model.model.layers.8.self_attn.q_proj.lora_A.default.weight",
+      "base_model.model.model.layers.8.self_attn.q_proj.lora_B.default.weight",
+      "base_model.model.model.layers.8.self_attn.v_proj.lora_A.default.weight",
+      "base_model.model.model.layers.8.self_attn.v_proj.lora_B.default.weight",
+      "base_model.model.model.layers.9.self_attn.q_proj.lora_A.default.weight",
+      "base_model.model.model.layers.9.self_attn.q_proj.lora_B.default.weight",
+      "base_model.model.model.layers.9.self_attn.v_proj.lora_A.default.weight",
+      "base_model.model.model.layers.9.self_attn.v_proj.lora_B.default.weight"
+    ],
+    "shapes": [
+      [
+        8,
+        1536
+      ],
+      [
+        1536,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        256,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        1536,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        256,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        1536,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        256,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        1536,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        256,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        1536,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        256,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        1536,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        256,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        1536,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        256,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        1536,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        256,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        1536,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        256,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        1536,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        256,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        1536,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        256,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        1536,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        256,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        1536,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        256,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        1536,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        256,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        1536,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        256,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        1536,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        256,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        1536,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        256,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        1536,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        256,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        1536,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        256,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        1536,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        256,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        1536,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        256,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        1536,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        256,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        1536,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        256,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        1536,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        256,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        1536,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        256,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        1536,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        256,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        1536,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        256,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        1536,
+        8
+      ],
+      [
+        8,
+        1536
+      ],
+      [
+        256,
+        8
+      ]
+    ],
+    "numels": [
+      12288,
+      12288,
+      12288,
+      2048,
+      12288,
+      12288,
+      12288,
+      2048,
+      12288,
+      12288,
+      12288,
+      2048,
+      12288,
+      12288,
+      12288,
+      2048,
+      12288,
+      12288,
+      12288,
+      2048,
+      12288,
+      12288,
+      12288,
+      2048,
+      12288,
+      12288,
+      12288,
+      2048,
+      12288,
+      12288,
+      12288,
+      2048,
+      12288,
+      12288,
+      12288,
+      2048,
+      12288,
+      12288,
+      12288,
+      2048,
+      12288,
+      12288,
+      12288,
+      2048,
+      12288,
+      12288,
+      12288,
+      2048,
+      12288,
+      12288,
+      12288,
+      2048,
+      12288,
+      12288,
+      12288,
+      2048,
+      12288,
+      12288,
+      12288,
+      2048,
+      12288,
+      12288,
+      12288,
+      2048,
+      12288,
+      12288,
+      12288,
+      2048,
+      12288,
+      12288,
+      12288,
+      2048,
+      12288,
+      12288,
+      12288,
+      2048,
+      12288,
+      12288,
+      12288,
+      2048,
+      12288,
+      12288,
+      12288,
+      2048,
+      12288,
+      12288,
+      12288,
+      2048,
+      12288,
+      12288,
+      12288,
+      2048,
+      12288,
+      12288,
+      12288,
+      2048,
+      12288,
+      12288,
+      12288,
+      2048,
+      12288,
+      12288,
+      12288,
+      2048,
+      12288,
+      12288,
+      12288,
+      2048,
+      12288,
+      12288,
+      12288,
+      2048
+    ],
+    "dtypes": [
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32",
+      "float32"
+    ],
+    "parameter_count": 1089536
+  },
+  "shared_initialization_path": "artifacts/shared_initializations/qwen25_1p5b_qv_r8_all28_seed0.pt",
+  "shared_initialization_digest": "fc61cc8ca79ddb4d1964b2fa12710e983fb76ced22cf848b4ba57f6a1d011089",
+  "response_budget": {
+    "unique_prompts_per_update": 8,
+    "generations_per_prompt": 8,
+    "responses_per_update": 64,
+    "optimizer_steps": 25,
+    "total_responses": 1600,
+    "backward_calls": 400
+  },
+  "objective": {
+    "implementation": "TRL token-level GRPO",
+    "loss_type": "grpo",
+    "importance_sampling_level": "token",
+    "reward_centering": "within-group mean",
+    "reward_scaling": "within-group standard deviation",
+    "vllm_importance_sampling_correction": true
+  },
+  "selected_step": 0,
+  "selection_val_accuracy": 0.6875,
+  "validation_records": [
+    {
+      "kind": "evaluation",
+      "split": "validation",
+      "method": "standard_grpo",
+      "seed": 0,
+      "step": 0,
+      "wall_time_seconds": 190.66326583502814,
+      "evaluation_seconds": 40.97556843003258,
+      "environment_samples": 0,
+      "generated_tokens": 351079,
+      "backward_calls": 0,
+      "val_accuracy": 0.6875,
+      "val_exact_reward": 0.6875,
+      "val_mean_response_tokens": 271.0625,
+      "best_val_accuracy": 0.6875,
+      "best_step": 0
+    },
+    {
+      "kind": "evaluation",
+      "split": "validation",
+      "method": "standard_grpo",
+      "seed": 0,
+      "step": 25,
+      "wall_time_seconds": 232.55454096989706,
+      "evaluation_seconds": 41.88314908789471,
+      "environment_samples": 1600,
+      "generated_tokens": 351079,
+      "backward_calls": 400,
+      "val_accuracy": 0.6875,
+      "val_exact_reward": 0.6875,
+      "val_mean_response_tokens": 271.75,
+      "best_val_accuracy": 0.6875,
+      "best_step": 0
+    }
+  ],
+  "git_commit": null,
+  "git_dirty": true,
+  "runtime": {
+    "python": "3.12.13",
+    "packages": {
+      "torch": "2.11.0+cu130",
+      "transformers": "5.15.0",
+      "trl": "1.10.0",
+      "peft": "0.20.0",
+      "vllm": "0.22.0",
+      "flash-attn": "2.8.3+cu130torch2.11",
+      "wandb": "0.28.2"
+    },
+    "cuda": "13.0",
+    "gpu": "NVIDIA H100 PCIe"
+  }
+}

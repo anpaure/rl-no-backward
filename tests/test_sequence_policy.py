@@ -266,3 +266,44 @@ def test_group_loo_and_projected_score_statistics_use_fixed_sequences() -> None:
         (rollout.advantages.unsqueeze(-1) * expected_completion_scores).mean(dim=(0, 1)),
     )
     assert torch.allclose(statistics.fisher, expected_fisher)
+
+
+def test_projected_statistics_apply_inference_weights_to_gradient_and_fisher() -> None:
+    _, _, rollout = make_rollout()
+    radius = 0.25
+    directions = 2
+    desired_scores = torch.arange(
+        rollout.response_input_ids.numel() * directions,
+        dtype=torch.float32,
+    ).reshape(*rollout.response_input_ids.shape, directions)
+    center = rollout.old_token_log_probs.unsqueeze(-1).expand_as(desired_scores)
+    positive = center + radius * desired_scores
+    negative = center - radius * desired_scores
+    weights = torch.zeros(*rollout.response_mask.shape[:-1], 1)
+    weights[:, 1] = 2.0
+
+    statistics = central_difference_score_statistics(
+        positive,
+        negative,
+        rollout,
+        radius,
+        sampling_weights=weights,
+    )
+    token_scores = desired_scores.masked_fill(~rollout.response_mask.unsqueeze(-1), 0.0)
+    expected_completion_scores = torch.zeros_like(statistics.completion_scores)
+    expected_completion_scores[:, 1] = 2.0 * token_scores[:, 1].sum(dim=1)
+    expected_gradient = (
+        rollout.advantages.unsqueeze(-1) * expected_completion_scores
+    ).mean(dim=(0, 1))
+    lengths = rollout.response_lengths.to(token_scores.dtype)
+    second_fisher = (
+        2.0
+        * torch.einsum("btd,bte->bde", token_scores[:, 1], token_scores[:, 1])
+        / lengths[:, 1, None, None]
+    )
+    expected_fisher = second_fisher.sum(dim=0) / (
+        rollout.batch_size * rollout.group_size
+    )
+    torch.testing.assert_close(statistics.completion_scores, expected_completion_scores)
+    torch.testing.assert_close(statistics.gradient, expected_gradient)
+    torch.testing.assert_close(statistics.fisher, expected_fisher)

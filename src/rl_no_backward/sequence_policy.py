@@ -436,6 +436,7 @@ def central_difference_score_statistics(
     radius: float,
     *,
     length_normalize: bool = False,
+    sampling_weights: Tensor | None = None,
 ) -> ProjectedScoreStatistics:
     """Build projected policy-gradient/Fisher statistics from paired probes.
 
@@ -455,7 +456,21 @@ def central_difference_score_statistics(
     token_scores = (
         (positive_token_log_probs - negative_token_log_probs) / (2.0 * radius)
     ).masked_fill(~mask, 0.0)
-    sequence_scores = token_scores.sum(dim=2)
+    if sampling_weights is None:
+        token_weights = torch.ones_like(rollout.response_mask, dtype=token_scores.dtype)
+    else:
+        if sampling_weights.shape == rollout.response_mask.shape[:-1] + (1,):
+            token_weights = sampling_weights.expand_as(rollout.response_mask)
+        elif sampling_weights.shape == rollout.response_mask.shape:
+            token_weights = sampling_weights
+        else:
+            raise ValueError("sampling_weights must be per-completion or per-token")
+        token_weights = token_weights.to(token_scores.dtype)
+        if not torch.isfinite(token_weights).all() or (token_weights < 0).any():
+            raise ValueError("sampling_weights must be finite and non-negative")
+    token_weights = token_weights.masked_fill(~rollout.response_mask, 0.0)
+    weighted_token_scores = token_scores * token_weights.unsqueeze(-1)
+    sequence_scores = weighted_token_scores.sum(dim=2)
     lengths = rollout.response_lengths.clamp_min(1).to(sequence_scores.dtype)
     if length_normalize:
         sequence_scores = sequence_scores / lengths.unsqueeze(-1)
@@ -465,7 +480,12 @@ def central_difference_score_statistics(
     # outer products—not an outer product of the summed completion score,
     # which would introduce spurious cross-token terms.
     per_completion_fisher = (
-        torch.einsum("bgtd,bgte->bgde", token_scores, token_scores) / lengths[..., None, None]
+        torch.einsum(
+            "bgtd,bgte->bgde",
+            token_scores * token_weights.sqrt().unsqueeze(-1),
+            token_scores * token_weights.sqrt().unsqueeze(-1),
+        )
+        / lengths[..., None, None]
     )
     fisher = per_completion_fisher.mean(dim=(0, 1))
     return ProjectedScoreStatistics(

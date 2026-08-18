@@ -190,6 +190,7 @@ def test_loader_and_summary_preserve_phase_timing_and_allocator_peaks(tmp_path: 
             "forward_calls": 5,
             "full_prefix_calls": 1,
             "suffix_calls": 4,
+            "policy_sync_seconds": 0.5,
             "rollout_and_old_score_seconds": 1.25,
             "optimizer_seconds": 2.5,
             "peak_gpu_memory_allocated_bytes": 3 * 2**30,
@@ -225,7 +226,9 @@ def test_loader_and_summary_preserve_phase_timing_and_allocator_peaks(tmp_path: 
 
     summary = summarize_results(frame, bootstrap_samples=10)
     assert summary["total_rollout_and_old_score_seconds_mean"].item() == pytest.approx(1.25)
+    assert summary["total_policy_sync_seconds_mean"].item() == pytest.approx(0.5)
     assert summary["total_optimizer_seconds_mean"].item() == pytest.approx(2.5)
+    assert summary["total_training_phase_seconds_mean"].item() == pytest.approx(4.25)
     assert summary["total_evaluation_seconds_mean"].item() == pytest.approx(2.0)
     assert summary["final_full_prefix_calls_mean"].item() == 1
     assert summary["final_suffix_calls_mean"].item() == 4
@@ -281,6 +284,61 @@ def test_validation_curve_excludes_same_step_test_but_summary_prefers_test(
     assert summary["final_expected_reward_mean"].item() == pytest.approx(0.95)
     assert summary["primary_metric_sources"].item() == "test_accuracy"
     assert summary["normalised_auc_environment_samples_mean"].item() == pytest.approx(0.3)
+
+
+def test_summary_reports_saved_best_checkpoint_without_rewriting_learning_curve(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "raw" / "bp_grpo_seed0.jsonl"
+    path.parent.mkdir(parents=True)
+    records = [
+        {
+            "kind": "evaluation",
+            "method": "bp_grpo",
+            "seed": 0,
+            "step": 0,
+            "environment_samples": 0,
+            "val_accuracy": 0.50,
+            "best_val_accuracy": 0.50,
+            "best_step": 0,
+        },
+        {
+            "kind": "evaluation",
+            "method": "bp_grpo",
+            "seed": 0,
+            "step": 10,
+            "environment_samples": 100,
+            "val_accuracy": 0.75,
+            "best_val_accuracy": 0.75,
+            "best_step": 10,
+        },
+        {
+            "kind": "evaluation",
+            "method": "bp_grpo",
+            "seed": 0,
+            "step": 20,
+            "environment_samples": 200,
+            "val_accuracy": 0.60,
+            "best_val_accuracy": 0.75,
+            "best_step": 10,
+        },
+    ]
+    path.write_text("".join(json.dumps(record) + "\n" for record in records))
+
+    frame = load_results(tmp_path)
+    curve = aggregate_metrics(
+        frame,
+        metric="accuracy",
+        by="environment_samples",
+        bootstrap_samples=20,
+    )
+    assert curve.loc[curve["environment_samples"] == 200, "mean"].item() == pytest.approx(0.60)
+
+    summary = summarize_results(frame, bootstrap_samples=20)
+    assert summary["endpoint_accuracy_mean"].item() == pytest.approx(0.60)
+    assert summary["final_accuracy_mean"].item() == pytest.approx(0.75)
+    assert summary["selected_step_mean"].item() == pytest.approx(10)
+    assert summary["performance_sources"].item() == "validation_selected_checkpoint"
 
 
 def test_plot_results_writes_readable_png_pdf_and_summary(tmp_path: Path) -> None:

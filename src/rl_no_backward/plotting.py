@@ -384,6 +384,14 @@ def _canonical_record(raw: Mapping[str, Any], path: Path, line_number: int) -> d
                     "rollout_seconds",
                 ),
             ),
+            "policy_sync_seconds": _find_number(
+                flat,
+                (
+                    "policy_sync_seconds",
+                    "adapter_sync_seconds",
+                    "vllm_sync_seconds",
+                ),
+            ),
             "optimizer_seconds": _find_number(
                 flat,
                 ("optimizer_seconds", "optimiser_seconds", "optimization_seconds"),
@@ -459,6 +467,24 @@ def _canonical_record(raw: Mapping[str, Any], path: Path, line_number: int) -> d
                 ),
             ),
             "accuracy": accuracy,
+            # Selection metrics are kept separate from the measurement at the
+            # current step. A run may finish after its best checkpoint;
+            # collapsing ``best_val_accuracy`` into ``accuracy`` would make
+            # the learning curve lie, while ignoring it would make the
+            # endpoint chart disagree with the checkpoint actually saved.
+            "selection_accuracy": _find_number(
+                flat,
+                (
+                    "selection_val_accuracy",
+                    "selection_accuracy",
+                    "best_val_accuracy",
+                    "best_accuracy",
+                ),
+            ),
+            "selected_step": _find_number(
+                flat,
+                ("selected_step", "selection_step", "best_step"),
+            ),
             "expected_reward": expected_reward,
             "score": accuracy if math.isfinite(accuracy) else expected_reward,
             "score_source": accuracy_source or reward_source,
@@ -533,6 +559,7 @@ def load_results(input_dir: str | Path) -> pd.DataFrame:
         "environment_samples",
         "wall_time_seconds",
         "rollout_and_old_score_seconds",
+        "policy_sync_seconds",
         "optimizer_seconds",
         "evaluation_seconds",
         "forward_calls",
@@ -544,6 +571,8 @@ def load_results(input_dir: str | Path) -> pd.DataFrame:
         "peak_gpu_memory_allocated_bytes",
         "peak_gpu_memory_reserved_bytes",
         "accuracy",
+        "selection_accuracy",
+        "selected_step",
         "expected_reward",
         "score",
         "empirical_kl",
@@ -730,18 +759,49 @@ def _per_run_summary(frame: pd.DataFrame) -> pd.DataFrame:
             if not validation_evaluations.empty
             else evaluations
         )
+        endpoint_accuracy = _last_finite(final_evaluations, "accuracy")
+        selection_accuracy = _last_finite(final_evaluations, "selection_accuracy")
+        selected_step = _last_finite(final_evaluations, "selected_step")
+        has_official_test = not test_evaluations.empty
+        if has_official_test:
+            # The test row is already an evaluation of the validation-selected
+            # checkpoint, so its measured accuracy is authoritative.
+            reported_accuracy = endpoint_accuracy
+            performance_source = "official_test_selected_checkpoint"
+        elif math.isfinite(selection_accuracy):
+            reported_accuracy = selection_accuracy
+            performance_source = "validation_selected_checkpoint"
+        else:
+            reported_accuracy = endpoint_accuracy
+            performance_source = "final_evaluation"
         training = group[group["kind"] == "train_step"]
         score_sources = [
             str(value)
             for value in final_evaluations.get("score_source", pd.Series(dtype=object)).dropna()
         ]
+        total_policy_sync_seconds = _sum_finite(training, "policy_sync_seconds")
+        total_rollout_seconds = _sum_finite(training, "rollout_and_old_score_seconds")
+        total_optimizer_seconds = _sum_finite(training, "optimizer_seconds")
+        if math.isfinite(total_rollout_seconds) and math.isfinite(total_optimizer_seconds):
+            total_training_phase_seconds = total_rollout_seconds + total_optimizer_seconds
+            if math.isfinite(total_policy_sync_seconds):
+                total_training_phase_seconds += total_policy_sync_seconds
+        else:
+            total_training_phase_seconds = float("nan")
         row: dict[str, Any] = {
             "run_id": run_id,
             "method": str(group["method"].iloc[0]),
             "seed": group["seed"].iloc[0],
             "score_source": Counter(score_sources).most_common(1)[0][0] if score_sources else "",
-            "final_score": _last_finite(final_evaluations, "score"),
-            "final_accuracy": _last_finite(final_evaluations, "accuracy"),
+            "performance_source": performance_source,
+            "selected_step": selected_step,
+            "endpoint_accuracy": endpoint_accuracy,
+            "final_score": (
+                reported_accuracy
+                if math.isfinite(reported_accuracy)
+                else _last_finite(final_evaluations, "score")
+            ),
+            "final_accuracy": reported_accuracy,
             "final_expected_reward": _last_finite(final_evaluations, "expected_reward"),
             "final_environment_samples": _last_finite(group, "environment_samples"),
             "final_wall_time_seconds": _last_finite(group, "wall_time_seconds"),
@@ -750,10 +810,10 @@ def _per_run_summary(frame: pd.DataFrame) -> pd.DataFrame:
             "final_suffix_calls": _last_finite(group, "suffix_calls"),
             "final_backward_calls": _last_finite(group, "backward_calls"),
             "final_teacher_forced_examples": _last_finite(group, "teacher_forced_examples"),
-            "total_rollout_and_old_score_seconds": _sum_finite(
-                training, "rollout_and_old_score_seconds"
-            ),
-            "total_optimizer_seconds": _sum_finite(training, "optimizer_seconds"),
+            "total_policy_sync_seconds": total_policy_sync_seconds,
+            "total_rollout_and_old_score_seconds": total_rollout_seconds,
+            "total_optimizer_seconds": total_optimizer_seconds,
+            "total_training_phase_seconds": total_training_phase_seconds,
             "total_evaluation_seconds": _sum_finite(evaluations, "evaluation_seconds"),
             "peak_gpu_memory_bytes": _max_finite(group, "peak_gpu_memory_bytes"),
             "peak_gpu_memory_allocated_bytes": _max_finite(
@@ -811,6 +871,8 @@ def summarize_results(
     estimate_columns = (
         "final_score",
         "final_accuracy",
+        "endpoint_accuracy",
+        "selected_step",
         "final_expected_reward",
         "auc_environment_samples",
         "normalised_auc_environment_samples",
@@ -823,8 +885,10 @@ def summarize_results(
         "final_suffix_calls",
         "final_backward_calls",
         "final_teacher_forced_examples",
+        "total_policy_sync_seconds",
         "total_rollout_and_old_score_seconds",
         "total_optimizer_seconds",
+        "total_training_phase_seconds",
         "total_evaluation_seconds",
         "peak_gpu_memory_bytes",
         "peak_gpu_memory_allocated_bytes",
@@ -839,6 +903,9 @@ def summarize_results(
             "runs": len(group),
             "seeds": int(group["seed"].nunique()),
             "primary_metric_sources": ";".join(sorted(set(sources))),
+            "performance_sources": ";".join(
+                sorted(str(value) for value in group["performance_source"].dropna())
+            ),
         }
         for column in estimate_columns:
             _add_estimate_columns(
@@ -1239,10 +1306,10 @@ def _plot_final_performance(
             )
             values.extend([low, high])
         ax.set_title(label, loc="left", fontweight="bold")
-        ax.set_xlabel("Final evaluation")
+        ax.set_xlabel("Selected checkpoint evaluation")
         ax.set_yticks(positions, [_display_name(method) for method in methods])
         _x_score_axis(ax, values)
-    fig.suptitle("Final performance · mean and 95% bootstrap CI", fontweight="bold")
+    fig.suptitle("Selected-checkpoint performance · mean and 95% bootstrap CI", fontweight="bold")
     return _save_figure(fig, output_dir, "final_performance")
 
 
@@ -1255,13 +1322,13 @@ def _plot_compute_memory(
     styles = _method_styles(methods)
     indexed = summary.set_index("method")
     has_phase_timing = (
-        "total_optimizer_seconds_mean" in summary
-        and summary["total_optimizer_seconds_mean"].notna().any()
+        "total_training_phase_seconds_mean" in summary
+        and summary["total_training_phase_seconds_mean"].notna().any()
     )
     compute_specification = (
         (
-            "total_optimizer_seconds_mean",
-            "Synchronized optimizer time (seconds)",
+            "total_training_phase_seconds_mean",
+            "Synchronized training phase (seconds)",
             1.0,
         )
         if has_phase_timing
@@ -1275,7 +1342,7 @@ def _plot_compute_memory(
         compute_specification,
         (
             "peak_gpu_memory_allocated_bytes_mean",
-            "HF trainer peak allocated memory (GiB)\n(vLLM worker excluded)",
+            "Process peak allocated memory (GiB)\n(scope recorded in metadata)",
             2**30,
         ),
     )

@@ -1,0 +1,12 @@
+# Locked against the installed H100 CUDA 13.0 fast path.  FlashAttention is
+# installed separately from the checksum-pinned prebuilt wheel; never build it
+# from source.
+torch==2.11.0
+transformers==5.15.0
+vllm==0.22.0
+trl==1.10.0
+peft==0.20.0
+accelerate==1.14.0
+datasets==4.8.5
+wandb==0.28.2
+safetensors==0.8.0
