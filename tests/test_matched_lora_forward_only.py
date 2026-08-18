@@ -153,6 +153,13 @@ def test_matched_forward_npg_uses_center_score_gradient_and_weighted_fisher(
     assert result.projected_gradient_norm == pytest.approx(
         statistics.gradient.norm().item(),
     )
+    assert result.grpo_loss_before == pytest.approx(-result.grpo_objective_before)
+    assert result.grpo_loss_after == pytest.approx(-result.grpo_objective_after)
+    assert result.surrogate_improvement == pytest.approx(
+        result.grpo_objective_after - result.grpo_objective_before
+    )
+    assert result.grpo_objective_after == pytest.approx(result.line_search_candidate_grpo_objective)
+    assert result.empirical_kl == pytest.approx(result.line_search_candidate_empirical_kl)
     unweighted = original_statistics(
         captured["positive"],
         captured["negative"],
@@ -162,6 +169,42 @@ def test_matched_forward_npg_uses_center_score_gradient_and_weighted_fisher(
         sampling_weights=None,
     )
     assert not torch.allclose(statistics.fisher, unweighted.fisher)
+
+
+def test_rejected_forward_step_keeps_applied_loss_fixed_and_records_candidate() -> None:
+    bundle, rollout = _fixture()
+    center = parameter_vector(bundle).clone()
+    result = matched_forward_npg_step(
+        bundle,
+        rollout,
+        rollout.old_token_log_probs,
+        torch.Generator().manual_seed(17),
+        MatchedGRPOObjectiveConfig(),
+        MatchedForwardConfig(
+            directions=2,
+            finite_difference_mu=0.02,
+            kl_budget=0.03,
+            max_step_norm=0.2,
+            line_search_steps=1,
+            minimum_surrogate_improvement=1.0e6,
+            scoring_micro_batch_size=2,
+        ),
+    )
+
+    assert not result.accepted
+    torch.testing.assert_close(parameter_vector(bundle), center, rtol=0, atol=0)
+    assert result.grpo_objective_after == result.grpo_objective_before
+    assert result.grpo_loss_after == result.grpo_loss_before
+    assert result.surrogate_improvement == 0.0
+    assert result.empirical_kl == 0.0
+    assert result.line_search_candidate_grpo_objective is not None
+    assert result.line_search_candidate_grpo_loss == pytest.approx(
+        -result.line_search_candidate_grpo_objective
+    )
+    assert result.line_search_candidate_surrogate_improvement == pytest.approx(
+        result.line_search_candidate_grpo_objective - result.grpo_objective_before
+    )
+    assert result.line_search_candidate_empirical_kl is not None
 
 
 def test_forward_module_source_has_no_reverse_mode_api_calls() -> None:

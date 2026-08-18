@@ -1,20 +1,27 @@
 from __future__ import annotations
 
 import json
+import os
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 import torch
+import yaml
 from torch import nn
 
+import rl_no_backward.locked_source_sealing as sealing_module
 import rl_no_backward.locked_test_evaluator as evaluator_module
 from rl_no_backward.evaluation_manifest import build_evaluation_split_manifest
 from rl_no_backward.gsm8k import GSM8KExample
+from rl_no_backward.locked_source_sealing import (
+    DevelopmentSourceEntry,
+    PriorQuestionRecord,
+    seal_locked_source_indices,
+)
 from rl_no_backward.locked_test_evaluator import (
-    LockedSourceIndexReceipt,
     build_locked_evaluation_plan,
-    build_locked_source_index_receipt,
     evaluate_locked_policy,
     load_locked_examples,
     load_locked_source_index_receipt,
@@ -49,20 +56,41 @@ def _manifest_and_receipt(tmp_path: Path):
         seed=7,
         namespace="locked-evaluator-test",
     )
-    receipt = build_locked_source_index_receipt(
+    by_id = {example.example_id: example for example in examples}
+    receipt, audit = seal_locked_source_indices(
         manifest,
-        [example.example_id for example in examples],
+        [example.question for example in examples],
+        [PriorQuestionRecord(examples[0].example_id, examples[0].question)],
+        [
+            DevelopmentSourceEntry(
+                by_id[example_id].source_index,
+                example_id,
+            )
+            for example_id in manifest.dev_example_ids
+        ],
         dataset_revision="dataset-commit",
+        access_sources={
+            "prior_exposure_question_samples": [
+                {
+                    "fields_used": ["example_id", "question"],
+                    "projection_parser": (
+                        "selective JSON lexer; nonselected values skipped without decoding"
+                    ),
+                    "reference_answer_values_used": False,
+                    "completion_values_used": False,
+                }
+            ]
+        },
     )
-    return examples, manifest, receipt
+    return examples, manifest, receipt, audit
 
 
 def test_locked_source_receipt_is_answer_free_bound_and_immutable(tmp_path) -> None:
-    _, manifest, receipt = _manifest_and_receipt(tmp_path)
+    examples, manifest, receipt, _ = _manifest_and_receipt(tmp_path)
     path = write_locked_source_index_receipt(tmp_path / "locked-indices.json", receipt)
     serialized = path.read_text(encoding="utf-8")
-    assert "question" not in serialized
     assert "answer" not in serialized
+    assert all(example.question not in serialized for example in examples)
     assert (
         load_locked_source_index_receipt(path, manifest, dataset_revision="dataset-commit")
         == receipt
@@ -72,14 +100,14 @@ def test_locked_source_receipt_is_answer_free_bound_and_immutable(tmp_path) -> N
     tampered = json.loads(serialized)
     tampered["entries"][0]["source_index"] += 1
     path.write_text(json.dumps(tampered), encoding="utf-8")
-    with pytest.raises(ValueError, match="digest"):
+    with pytest.raises(ValueError, match="sorted|digest"):
         load_locked_source_index_receipt(path, manifest, dataset_revision="dataset-commit")
     with pytest.raises(FileExistsError, match="overwrite"):
         write_locked_source_index_receipt(path, receipt)
 
 
 def test_locked_loader_selects_only_committed_indices_without_full_iteration(tmp_path) -> None:
-    examples, manifest, receipt = _manifest_and_receipt(tmp_path)
+    examples, manifest, receipt, _ = _manifest_and_receipt(tmp_path)
 
     class SelectOnlyDataset:
         def __init__(self) -> None:
@@ -110,10 +138,12 @@ def test_locked_loader_selects_only_committed_indices_without_full_iteration(tmp
     assert all(example.source_index in dataset.selected_indices for example in loaded)
 
 
-def _write_frozen_benchmark(tmp_path: Path, manifest, *, seeds=(0,)) -> Path:
+def _write_frozen_benchmark(tmp_path: Path, manifest, *, seeds=(0, 1, 2)) -> Path:
     benchmark = tmp_path / "benchmark"
     (benchmark / "checkpoints").mkdir(parents=True)
     (benchmark / "selection").mkdir()
+    (benchmark / "raw").mkdir()
+    (benchmark / "learning_gate").mkdir()
     config = {
         "model_name": "Qwen/Qwen2.5-1.5B-Instruct",
         "model_revision": "1" * 40,
@@ -125,6 +155,10 @@ def _write_frozen_benchmark(tmp_path: Path, manifest, *, seeds=(0,)) -> Path:
         "seeds": list(seeds),
         "run_test_evaluation": False,
         "test_size": 0,
+        "dev_size": 1,
+        "evaluation_manifest": "manifest.json",
+        "dev_source_index_receipt": "dev.json",
+        "touched_test_exclusions": "quarantine.json",
         "rollout_backend": "vllm_lora",
         "vllm_flash_attn_version": 2,
         "vllm_batch_invariant": False,
@@ -162,7 +196,14 @@ def _write_frozen_benchmark(tmp_path: Path, manifest, *, seeds=(0,)) -> Path:
         "adapter_parameter_count": 1,
         "lora_parameterization": config["lora"],
         "evaluation_manifest_sha256": manifest.manifest_sha256,
+        "evaluation_manifest_path": "manifest.json",
+        "evaluation_manifest_dev_ids_sha256": manifest.dev_ids_sha256,
         "evaluation_manifest_locked_test_ids_sha256": manifest.locked_test_ids_sha256,
+        "val_example_ids": list(manifest.dev_example_ids),
+        "excluded_test_example_ids": list(manifest.excluded_test_example_ids),
+        "dev_source_index_receipt_path": "dev.json",
+        "dev_source_index_receipt_sha256": "d" * 64,
+        "development_row_loading": "Dataset.select(committed_dev_source_indices)",
         "test_example_ids": [],
         "locked_test_rows_materialized": False,
         "locked_test_accessed": False,
@@ -174,6 +215,7 @@ def _write_frozen_benchmark(tmp_path: Path, manifest, *, seeds=(0,)) -> Path:
             {
                 "passed": True,
                 "status": "complete",
+                "output_dir": str(benchmark.resolve()),
                 "expected_runs": 1 + 2 * len(seeds),
                 "validated_runs": 1 + 2 * len(seeds),
                 "errors": [],
@@ -188,13 +230,14 @@ def _write_frozen_benchmark(tmp_path: Path, manifest, *, seeds=(0,)) -> Path:
         for method in (("base", "bp_grpo", "fo_npg") if seed_index == 0 else ("bp_grpo", "fo_npg"))
     ]
     for value, (method, seed) in enumerate(policy_pairs, start=1):
+        selected_step = 0 if method == "base" else value
         state = {"layer.lora_A.default.weight": torch.tensor([float(value)])}
         checkpoint = benchmark / "checkpoints" / f"gsm8k_{method}_seed{seed}.pt"
         torch.save(
             {
                 "method": method,
                 "seed": seed,
-                "selected_step": value,
+                "selected_step": selected_step,
                 "selection_val_accuracy": value / 10,
                 "lora_state": state,
             },
@@ -204,27 +247,109 @@ def _write_frozen_benchmark(tmp_path: Path, manifest, *, seeds=(0,)) -> Path:
             "schema": "rl-no-backward-validation-selection-v1",
             "method": method,
             "seed": seed,
-            "selected_step": value,
+            "selected_step": selected_step,
             "selection_split": "development",
             "selection_metric": "exact_match",
             "tie_breaker": "latest_checkpoint",
             "selection_val_accuracy": value / 10,
             "selected_lora_state_digest": lora_state_digest(state),
-            "checkpoint_path": f"/original/{checkpoint.name}",
+            "checkpoint_path": str(checkpoint.resolve()),
         }
         (benchmark / "selection" / f"gsm8k_{method}_seed{seed}.json").write_text(
             json.dumps(selection), encoding="utf-8"
         )
+        raw_records = (
+            [
+                {
+                    "kind": "evaluation",
+                    "split": "validation",
+                    "method": method,
+                    "seed": seed,
+                    "step": 0,
+                    "val_accuracy": value / 10,
+                }
+            ]
+            if method == "base"
+            else [
+                {
+                    "kind": "evaluation",
+                    "split": "validation",
+                    "method": method,
+                    "seed": seed,
+                    "step": 0,
+                    "val_accuracy": max(0.0, value / 10 - 0.1),
+                },
+                {
+                    "kind": "evaluation",
+                    "split": "validation",
+                    "method": method,
+                    "seed": seed,
+                    "step": selected_step,
+                    "val_accuracy": value / 10,
+                },
+            ]
+        )
+        (benchmark / "raw" / f"gsm8k_{method}_seed{seed}.jsonl").write_text(
+            "".join(json.dumps(record) + "\n" for record in raw_records), encoding="utf-8"
+        )
+        learning_gate = {
+            "schema": "rl-no-backward-matched-learning-gate-v2",
+            "passed": True,
+            "hard_structural_checks_passed": True,
+            "failed_hard_structural_checks": [],
+            "hard_structural_checks": {},
+        }
+        if method == "base":
+            learning_gate["role"] = "non-updating baseline"
+        else:
+            learning_gate["method"] = method
+            learning_gate["seed"] = seed
+            learning_gate["best_dev_accuracy"] = value / 10
+        (benchmark / "learning_gate" / f"gsm8k_{method}_seed{seed}.json").write_text(
+            json.dumps(learning_gate), encoding="utf-8"
+        )
     return benchmark
+
+
+def _patch_synthetic_plan_guards(monkeypatch) -> None:
+    monkeypatch.setattr(evaluator_module, "EXPECTED_OFFICIAL_TEST_COUNT", 4)
+    monkeypatch.setattr(evaluator_module, "EXPECTED_EXCLUDED_TEST_COUNT", 1)
+    monkeypatch.setattr(evaluator_module, "EXPECTED_DEV_COUNT", 1)
+    monkeypatch.setattr(evaluator_module, "EXPECTED_LOCKED_TEST_COUNT", 2)
+    monkeypatch.setattr(evaluator_module, "EXPECTED_DATASET_REVISION", "dataset-commit")
+    monkeypatch.setattr(sealing_module, "EXPECTED_OFFICIAL_TEST_COUNT", 4)
+    monkeypatch.setattr(sealing_module, "EXPECTED_EXCLUDED_COUNT", 1)
+    monkeypatch.setattr(sealing_module, "EXPECTED_DEV_COUNT", 1)
+    monkeypatch.setattr(sealing_module, "EXPECTED_LOCKED_COUNT", 2)
+    monkeypatch.setattr(evaluator_module, "validate_locked_source_audit", lambda *_: None)
+    monkeypatch.setattr(
+        evaluator_module,
+        "_validate_bound_split_inputs",
+        lambda *_: {
+            "development_source_receipt_relpath": "dev.json",
+            "quarantine_relpath": "quarantine.json",
+        },
+    )
+    monkeypatch.setattr(
+        evaluator_module,
+        "_validate_prior_question_evidence",
+        lambda *_: (
+            {
+                "metadata_file_sha256": "a" * 64,
+                "evidence_relpath": "evidence.json",
+            },
+        ),
+    )
 
 
 def test_plan_freezes_all_selected_checkpoints_without_loading_dataset(
     monkeypatch, tmp_path
 ) -> None:
-    _, manifest, receipt = _manifest_and_receipt(tmp_path)
+    _, manifest, receipt, audit = _manifest_and_receipt(tmp_path)
     manifest_path = tmp_path / "manifest.json"
     manifest_path.write_text(json.dumps(manifest.as_dict()), encoding="utf-8")
     receipt_path = write_locked_source_index_receipt(tmp_path / "indices.json", receipt)
+    receipt_path.with_suffix(".audit.json").write_text(json.dumps(audit), encoding="utf-8")
     benchmark = _write_frozen_benchmark(tmp_path, manifest)
 
     def fake_git(*args, **_):
@@ -237,11 +362,11 @@ def test_plan_freezes_all_selected_checkpoints_without_loading_dataset(
         raise AssertionError(args)
 
     monkeypatch.setattr(evaluator_module, "_git_output", fake_git)
+    _patch_synthetic_plan_guards(monkeypatch)
     plan = build_locked_evaluation_plan(
         benchmark,
         manifest_path,
         receipt_path,
-        expected_locked_count=2,
         enforce_committed_inputs=False,
     )
     assert plan["dataset"]["locked_test_count"] == 2
@@ -249,10 +374,16 @@ def test_plan_freezes_all_selected_checkpoints_without_loading_dataset(
         "base",
         "bp_grpo",
         "fo_npg",
+        "bp_grpo",
+        "fo_npg",
+        "bp_grpo",
+        "fo_npg",
     ]
     assert len(plan["checkpoint_set_sha256"]) == 64
     assert len(plan["plan_sha256"]) == 64
-    assert plan["row_loading"] == "Dataset.select(committed_locked_source_indices)"
+    assert plan["row_loading"] == (
+        "Dataset.select(committed_locked_source_indices), then authorized opaque-ID reorder"
+    )
     assert plan["base_policy_semantics"] == {
         "evaluated_once": True,
         "seed": 0,
@@ -263,10 +394,11 @@ def test_plan_freezes_all_selected_checkpoints_without_loading_dataset(
 def test_three_seed_plan_evaluates_one_shared_base_and_each_trained_policy(
     monkeypatch, tmp_path
 ) -> None:
-    _, manifest, receipt = _manifest_and_receipt(tmp_path)
+    _, manifest, receipt, audit = _manifest_and_receipt(tmp_path)
     manifest_path = tmp_path / "manifest.json"
     manifest_path.write_text(json.dumps(manifest.as_dict()), encoding="utf-8")
     receipt_path = write_locked_source_index_receipt(tmp_path / "indices.json", receipt)
+    receipt_path.with_suffix(".audit.json").write_text(json.dumps(audit), encoding="utf-8")
     benchmark = _write_frozen_benchmark(tmp_path, manifest, seeds=(0, 1, 2))
 
     def fake_git(*args, **_):
@@ -278,11 +410,11 @@ def test_three_seed_plan_evaluates_one_shared_base_and_each_trained_policy(
         return values[args]
 
     monkeypatch.setattr(evaluator_module, "_git_output", fake_git)
+    _patch_synthetic_plan_guards(monkeypatch)
     plan = build_locked_evaluation_plan(
         benchmark,
         manifest_path,
         receipt_path,
-        expected_locked_count=2,
         enforce_committed_inputs=False,
     )
     assert [(row["method"], row["seed"]) for row in plan["checkpoints"]] == [
@@ -295,6 +427,189 @@ def test_three_seed_plan_evaluates_one_shared_base_and_each_trained_policy(
         ("fo_npg", 2),
     ]
     assert plan["base_policy_semantics"]["seed"] == 0
+    assert len(plan["checkpoints"]) == 7
+    assert all("raw_file_sha256" in row for row in plan["checkpoints"])
+    assert all("learning_gate_file_sha256" in row for row in plan["checkpoints"])
+
+
+def test_locked_plan_rejects_nonfinal_counts_before_artifact_reads(tmp_path) -> None:
+    _, manifest, receipt, audit = _manifest_and_receipt(tmp_path)
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest.as_dict()), encoding="utf-8")
+    receipt_path = write_locked_source_index_receipt(tmp_path / "indices.json", receipt)
+    receipt_path.with_suffix(".audit.json").write_text(json.dumps(audit), encoding="utf-8")
+    with pytest.raises(ValueError, match="1319/384/256/679"):
+        build_locked_evaluation_plan(tmp_path / "missing-benchmark", manifest_path, receipt_path)
+
+
+def test_training_metadata_rejects_any_seed_set_except_exact_final_three(tmp_path) -> None:
+    _, manifest, _, _ = _manifest_and_receipt(tmp_path)
+    benchmark = _write_frozen_benchmark(tmp_path, manifest, seeds=(0,))
+    metadata = json.loads((benchmark / "metadata.json").read_text(encoding="utf-8"))
+    with pytest.raises(ValueError, match="exact seeds"):
+        evaluator_module._validate_training_metadata(metadata, manifest)
+
+
+@pytest.mark.parametrize(
+    ("expected_runs", "validated_runs"),
+    ((6, 6), (7, 6), (6, 7), (8, 8)),
+)
+def test_plan_requires_exactly_seven_validated_runs(
+    monkeypatch, tmp_path, expected_runs, validated_runs
+) -> None:
+    _, manifest, receipt, audit = _manifest_and_receipt(tmp_path)
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest.as_dict()), encoding="utf-8")
+    receipt_path = write_locked_source_index_receipt(tmp_path / "indices.json", receipt)
+    receipt_path.with_suffix(".audit.json").write_text(json.dumps(audit), encoding="utf-8")
+    benchmark = _write_frozen_benchmark(tmp_path, manifest)
+    validation_path = benchmark / "artifact_validation.json"
+    validation = json.loads(validation_path.read_text(encoding="utf-8"))
+    validation.update(expected_runs=expected_runs, validated_runs=validated_runs)
+    validation_path.write_text(json.dumps(validation), encoding="utf-8")
+    _patch_synthetic_plan_guards(monkeypatch)
+    with pytest.raises(ValueError, match="artifact validation"):
+        build_locked_evaluation_plan(
+            benchmark,
+            manifest_path,
+            receipt_path,
+            enforce_committed_inputs=False,
+        )
+
+
+def test_selection_is_recomputed_from_raw_latest_max_and_gate_is_bound(tmp_path) -> None:
+    _, manifest, _, _ = _manifest_and_receipt(tmp_path)
+    benchmark = _write_frozen_benchmark(tmp_path, manifest)
+    label = "gsm8k_bp_grpo_seed0"
+    raw_path = benchmark / "raw" / f"{label}.jsonl"
+    records = [json.loads(line) for line in raw_path.read_text(encoding="utf-8").splitlines()]
+    selected = json.loads((benchmark / "selection" / f"{label}.json").read_text(encoding="utf-8"))
+    records.append(
+        {
+            "kind": "evaluation",
+            "split": "validation",
+            "method": "bp_grpo",
+            "seed": 0,
+            "step": selected["selected_step"] + 10,
+            "val_accuracy": selected["selection_val_accuracy"],
+        }
+    )
+    raw_path.write_text("".join(json.dumps(row) + "\n" for row in records), encoding="utf-8")
+    with pytest.raises(ValueError, match="latest-step max"):
+        evaluator_module._selection_and_checkpoint_receipt(
+            benchmark, method="bp_grpo", seed=0, expected_parameter_count=1
+        )
+
+    # Restore the raw log and independently prove that a failed structural
+    # learning gate cannot enter a locked plan.
+    raw_path.write_text("".join(json.dumps(row) + "\n" for row in records[:-1]), encoding="utf-8")
+    gate_path = benchmark / "learning_gate" / f"{label}.json"
+    gate = json.loads(gate_path.read_text(encoding="utf-8"))
+    gate["hard_structural_checks_passed"] = False
+    gate["failed_hard_structural_checks"] = ["policy_digest_changed"]
+    gate_path.write_text(json.dumps(gate), encoding="utf-8")
+    with pytest.raises(ValueError, match="structurally passing"):
+        evaluator_module._selection_and_checkpoint_receipt(
+            benchmark, method="bp_grpo", seed=0, expected_parameter_count=1
+        )
+
+
+def test_benchmark_and_config_paths_reject_symlinks_and_parent_escapes(tmp_path) -> None:
+    _, manifest, _, _ = _manifest_and_receipt(tmp_path)
+    benchmark = _write_frozen_benchmark(tmp_path, manifest)
+    raw_path = benchmark / "raw" / "gsm8k_bp_grpo_seed0.jsonl"
+    outside = tmp_path / "outside.jsonl"
+    outside.write_text(raw_path.read_text(encoding="utf-8"), encoding="utf-8")
+    raw_path.unlink()
+    os.symlink(outside, raw_path)
+    with pytest.raises(ValueError, match="symlink"):
+        evaluator_module._selection_and_checkpoint_receipt(
+            benchmark, method="bp_grpo", seed=0, expected_parameter_count=1
+        )
+    with pytest.raises(ValueError, match="must not be absolute or contain"):
+        evaluator_module._resolve_config_input_path(
+            "../outside.json", tmp_path, name="adversarial config path"
+        )
+    linked_config = tmp_path / "linked-config.json"
+    os.symlink(outside, linked_config)
+    with pytest.raises(ValueError, match="symlink"):
+        evaluator_module._resolve_config_input_path(
+            linked_config.name, tmp_path, name="adversarial config symlink"
+        )
+
+
+def test_selection_and_source_audit_paths_cannot_escape_or_traverse_symlinks(
+    monkeypatch, tmp_path
+) -> None:
+    _, manifest, receipt, audit = _manifest_and_receipt(tmp_path)
+    benchmark = _write_frozen_benchmark(tmp_path, manifest)
+    selection_path = benchmark / "selection" / "gsm8k_bp_grpo_seed0.json"
+    selection = json.loads(selection_path.read_text(encoding="utf-8"))
+    selection["checkpoint_path"] = str(tmp_path / "outside" / "gsm8k_bp_grpo_seed0.pt")
+    selection_path.write_text(json.dumps(selection), encoding="utf-8")
+    with pytest.raises(ValueError, match="selection contract"):
+        evaluator_module._selection_and_checkpoint_receipt(
+            benchmark, method="bp_grpo", seed=0, expected_parameter_count=1
+        )
+
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest.as_dict()), encoding="utf-8")
+    receipt_path = write_locked_source_index_receipt(tmp_path / "indices.json", receipt)
+    outside_audit = tmp_path / "outside-audit.json"
+    outside_audit.write_text(json.dumps(audit), encoding="utf-8")
+    os.symlink(outside_audit, receipt_path.with_suffix(".audit.json"))
+    _patch_synthetic_plan_guards(monkeypatch)
+    with pytest.raises(ValueError, match="symlink"):
+        build_locked_evaluation_plan(
+            benchmark,
+            manifest_path,
+            receipt_path,
+            enforce_committed_inputs=False,
+        )
+
+
+def test_real_split_bindings_link_dev_quarantine_manifest_and_seal() -> None:
+    worktree = Path.cwd()
+    manifest_path = worktree / "configs/gsm8k_standard_lora_eval_manifest.json"
+    receipt_path = worktree / "configs/gsm8k_standard_lora_locked_source_indices.json"
+    audit_path = receipt_path.with_suffix(".audit.json")
+    manifest = evaluator_module.load_evaluation_split_manifest(manifest_path)
+    receipt = load_locked_source_index_receipt(
+        receipt_path,
+        manifest,
+        dataset_revision="740312add88f781978c0658806c59bc2815b9866",
+    )
+    audit = json.loads(audit_path.read_text(encoding="utf-8"))
+    config = yaml.safe_load((worktree / "configs/gsm8k_matched_lora_final.yaml").read_text())
+    metadata = {
+        "dev_source_index_receipt_sha256": audit["access_sources"]["development_source_receipt"][
+            "receipt_sha256"
+        ],
+        "dev_source_index_receipt_path": config["dev_source_index_receipt"],
+        "evaluation_manifest_path": config["evaluation_manifest"],
+    }
+    bound = evaluator_module._validate_bound_split_inputs(
+        config,
+        metadata,
+        manifest,
+        receipt,
+        audit,
+        manifest_path,
+        worktree,
+    )
+    assert bound["development_ids_sha256"] == manifest.dev_ids_sha256
+    assert bound["excluded_test_ids_sha256"] == manifest.excluded_test_ids_sha256
+    bad_metadata = {**metadata, "dev_source_index_receipt_sha256": "0" * 64}
+    with pytest.raises(ValueError, match="same dev/manifest"):
+        evaluator_module._validate_bound_split_inputs(
+            config,
+            bad_metadata,
+            manifest,
+            receipt,
+            audit,
+            manifest_path,
+            worktree,
+        )
 
 
 def test_unauthorized_or_previously_consumed_run_never_calls_dataset_loader(tmp_path) -> None:
@@ -424,19 +739,26 @@ def test_authorized_run_consumes_ledger_once_and_writes_every_policy(monkeypatch
     }
     (benchmark / "metadata.json").write_text(json.dumps({"config": config}), encoding="utf-8")
     ids = tuple(f"locked-{index}" for index in range(679))
+    policy_pairs = [
+        ("base", 0, "a"),
+        ("bp_grpo", 0, "b"),
+        ("fo_npg", 0, "c"),
+        ("bp_grpo", 1, "d"),
+        ("fo_npg", 1, "e"),
+        ("bp_grpo", 2, "f"),
+        ("fo_npg", 2, "0"),
+    ]
     checkpoints = [
         {
             "method": method,
-            "seed": 0,
+            "seed": seed,
             "selected_step": index,
             "selection_val_accuracy": 0.5,
             "selected_lora_state_digest": character * 64,
             "checkpoint_file_sha256": str(index) * 64,
-            "checkpoint_relpath": f"checkpoints/{method}.pt",
+            "checkpoint_relpath": f"checkpoints/{method}-seed{seed}.pt",
         }
-        for index, (method, character) in enumerate(
-            (("base", "a"), ("bp_grpo", "b"), ("fo_npg", "c")), start=1
-        )
+        for index, (method, seed, character) in enumerate(policy_pairs, start=1)
     ]
     plan = {
         "plan_sha256": "d" * 64,
@@ -445,7 +767,7 @@ def test_authorized_run_consumes_ledger_once_and_writes_every_policy(monkeypatch
         "locked_test_ids_sha256": "1" * 64,
         "source_index_receipt_sha256": "2" * 64,
         "benchmark_metadata_sha256": evaluator_module._file_digest(benchmark / "metadata.json"),
-        "seeds": [0],
+        "seeds": [0, 1, 2],
         "checkpoints": checkpoints,
     }
     monkeypatch.setattr(evaluator_module, "build_locked_evaluation_plan", lambda *_: plan)
@@ -573,9 +895,12 @@ def test_authorized_run_consumes_ledger_once_and_writes_every_policy(monkeypatch
     assert (output / "COMPLETE.json").is_file()
     result = json.loads(result_path.read_text(encoding="utf-8"))
     assert result["status"] == "complete"
-    assert len(result["results"]) == 3
+    assert [(row["method"], row["seed"]) for row in result["results"]] == [
+        (method, seed) for method, seed, _ in policy_pairs
+    ]
+    assert len(result["results"]) == 7
     assert all(row["example_count"] == 679 for row in result["results"])
-    assert len(list((output / "samples").glob("*.jsonl"))) == 3
+    assert len(list((output / "samples").glob("*.jsonl"))) == 7
 
     with pytest.raises(FileExistsError, match="already consumed"):
         run_locked_test_evaluation(
@@ -589,21 +914,6 @@ def test_authorized_run_consumes_ledger_once_and_writes_every_policy(monkeypatch
 
 
 def test_receipt_rejects_manifest_order_tampering(tmp_path) -> None:
-    _, manifest, receipt = _manifest_and_receipt(tmp_path)
-    reversed_receipt = LockedSourceIndexReceipt(
-        dataset_id=receipt.dataset_id,
-        dataset_config=receipt.dataset_config,
-        dataset_revision=receipt.dataset_revision,
-        evaluation_manifest_sha256=receipt.evaluation_manifest_sha256,
-        official_test_count=receipt.official_test_count,
-        locked_test_count=receipt.locked_test_count,
-        entries=tuple(reversed(receipt.entries)),
-        receipt_sha256=evaluator_module._json_digest(
-            {
-                **receipt.payload_without_digest(),
-                "entries": [entry.as_dict() for entry in reversed(receipt.entries)],
-            }
-        ),
-    )
-    with pytest.raises(ValueError, match="manifest locked order"):
-        reversed_receipt.validate_manifest(manifest, dataset_revision="dataset-commit")
+    _, _, receipt, _ = _manifest_and_receipt(tmp_path)
+    with pytest.raises(ValueError, match="locked_source_indices must be sorted"):
+        replace(receipt, entries=tuple(reversed(receipt.entries)))

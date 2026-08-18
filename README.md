@@ -32,6 +32,18 @@ policy and improves the predeclared learning metric, the forward-only
 finite-difference coordinates agree with an exact diagnostic gradient, and
 both methods reproduce the same initial rollout.
 
+An optional, non-headline `fo_focus_npg` ablation keeps the identical q=8
+forward-only budget while replacing the isotropic search basis with an
+approximate finite-scale cross-sketch FOCUS heuristic: a B-only standard-LoRA
+bootstrap followed by disjoint A4/B4 probes guided by rank-two state. The state
+is updated from deterministically disjoint prompt halves using the probe token
+scores already in memory, so it adds no policy evaluations and persists even
+when a line-search proposal is rejected. Because production uses finite-radius
+BF16 policy differences, this state is not presented as an unbiased covariance
+estimator. The primary final config remains exactly base/BP-GRPO/FO-NPG; the
+100-step observe-only ablation is
+`configs/gsm8k_matched_lora_focus_ablation.yaml`.
+
 ## Why rescore stored trajectories?
 
 Return-difference evolution strategies must regenerate rollouts for every

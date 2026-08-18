@@ -255,15 +255,11 @@ def _normalise_config(config: Mapping[str, Any], issues: _Issues) -> dict[str, A
     if vllm_batch_invariant and config.get("rollout_backend") != "vllm":
         issues.invalid("config.vllm_batch_invariant=true requires rollout_backend='vllm'")
         return None
-    vllm_enable_v1_multiprocessing = config.get(
-        "vllm_enable_v1_multiprocessing", True
-    )
+    vllm_enable_v1_multiprocessing = config.get("vllm_enable_v1_multiprocessing", True)
     if not isinstance(vllm_enable_v1_multiprocessing, bool):
         issues.invalid("config.vllm_enable_v1_multiprocessing must be boolean")
         return None
-    vllm_allow_insecure_serialization = config.get(
-        "vllm_allow_insecure_serialization", False
-    )
+    vllm_allow_insecure_serialization = config.get("vllm_allow_insecure_serialization", False)
     if not isinstance(vllm_allow_insecure_serialization, bool):
         issues.invalid("config.vllm_allow_insecure_serialization must be boolean")
         return None
@@ -301,7 +297,9 @@ def _expected_runs(config: Mapping[str, Any]) -> list[ExpectedRun]:
         method_seeds = seeds[:1] if is_base else seeds
         is_forward = not is_base and normalised not in _BACKPROP_METHODS
         for seed in method_seeds:
-            runs.append(ExpectedRun(method=method, seed=seed, is_base=is_base, is_forward_only=is_forward))
+            runs.append(
+                ExpectedRun(method=method, seed=seed, is_base=is_base, is_forward_only=is_forward)
+            )
     return runs
 
 
@@ -352,9 +350,7 @@ def _validate_provenance(
     provenance = provenance if isinstance(provenance, Mapping) else {}
     source = provenance.get("source")
     source = source if isinstance(source, Mapping) else provenance
-    commit = _first_key(source, _SOURCE_COMMIT_KEYS) or _first_key(
-        metadata, _SOURCE_COMMIT_KEYS
-    )
+    commit = _first_key(source, _SOURCE_COMMIT_KEYS) or _first_key(metadata, _SOURCE_COMMIT_KEYS)
     if commit is None:
         issues.invalid("metadata is missing source commit provenance")
     elif not re.fullmatch(r"[0-9a-fA-F]{7,64}", commit):
@@ -364,9 +360,11 @@ def _validate_provenance(
     model = model if isinstance(model, Mapping) else metadata.get("model", {})
     model = model if isinstance(model, Mapping) else {}
     model_id = _first_key(model, _MODEL_ID_KEYS) or _nonempty_string(config.get("model_name"))
-    model_revision = _first_key(model, _MODEL_REVISION_KEYS) or _first_key(
-        metadata, _MODEL_REVISION_KEYS
-    ) or _nonempty_string(config.get("model_revision"))
+    model_revision = (
+        _first_key(model, _MODEL_REVISION_KEYS)
+        or _first_key(metadata, _MODEL_REVISION_KEYS)
+        or _nonempty_string(config.get("model_revision"))
+    )
     if model_id is None:
         issues.invalid("metadata/config is missing model identifier provenance")
     if model_revision is None:
@@ -375,12 +373,16 @@ def _validate_provenance(
     dataset = provenance.get("dataset")
     dataset = dataset if isinstance(dataset, Mapping) else metadata.get("dataset", {})
     dataset = dataset if isinstance(dataset, Mapping) else {}
-    dataset_id = _first_key(dataset, _DATASET_ID_KEYS) or _first_key(
-        metadata, ("dataset_id", "dataset_name", "dataset_path")
-    ) or _first_key(config, ("dataset_id", "dataset_name", "dataset_path"))
-    dataset_revision = _first_provenance_value(dataset, _DATASET_REVISION_KEYS) or (
-        _first_provenance_value(metadata, _DATASET_REVISION_KEYS)
-    ) or _first_provenance_value(config, _DATASET_REVISION_KEYS)
+    dataset_id = (
+        _first_key(dataset, _DATASET_ID_KEYS)
+        or _first_key(metadata, ("dataset_id", "dataset_name", "dataset_path"))
+        or _first_key(config, ("dataset_id", "dataset_name", "dataset_path"))
+    )
+    dataset_revision = (
+        _first_provenance_value(dataset, _DATASET_REVISION_KEYS)
+        or (_first_provenance_value(metadata, _DATASET_REVISION_KEYS))
+        or _first_provenance_value(config, _DATASET_REVISION_KEYS)
+    )
     if dataset_id is None:
         issues.invalid("metadata/config is missing dataset identifier provenance")
     if dataset_revision is None:
@@ -422,7 +424,9 @@ def _collect_excluded_ids(value: Any, path: tuple[str, ...] = ()) -> set[str]:
 def _validate_example_ids(
     metadata: Mapping[str, Any], config: Mapping[str, Any], issues: _Issues
 ) -> None:
-    train_ids = _coerce_id_set(metadata.get("train_example_ids"), "metadata.train_example_ids", issues)
+    train_ids = _coerce_id_set(
+        metadata.get("train_example_ids"), "metadata.train_example_ids", issues
+    )
     val_ids = _coerce_id_set(metadata.get("val_example_ids"), "metadata.val_example_ids", issues)
     test_ids = _coerce_id_set(metadata.get("test_example_ids"), "metadata.test_example_ids", issues)
 
@@ -537,7 +541,9 @@ def _split_evaluations(
         elif split in {"validation", "val", "valid", "dev", "evaluation", "eval", ""}:
             validation.append(record)
         else:
-            issues.invalid(f"{run.label} has evaluation record with unsupported split {raw_split!r}")
+            issues.invalid(
+                f"{run.label} has evaluation record with unsupported split {raw_split!r}"
+            )
     return validation, test
 
 
@@ -550,7 +556,9 @@ def _validate_selection_record(
     if isinstance(selected_step, bool) or not isinstance(selected_step, int):
         issues.invalid(f"{run.label} official-test record is missing integer selected_step")
     elif not 0 <= selected_step <= int(config["steps"]):
-        issues.invalid(f"{run.label} selected_step {selected_step} is outside the configured budget")
+        issues.invalid(
+            f"{run.label} selected_step {selected_step} is outside the configured budget"
+        )
     selection_value = None
     for key in ("selection_metric", "selection_val_accuracy", "selection_accuracy"):
         if key in record:
@@ -583,13 +591,11 @@ def _validate_rollout_provenance(
         label = f"{run.label} train-step record {index}"
         if record.get("rollout_provenance_version") != _ROLLOUT_PROVENANCE_VERSION:
             issues.invalid(
-                f"{label} must preserve rollout_provenance_version="
-                f"{_ROLLOUT_PROVENANCE_VERSION!r}"
+                f"{label} must preserve rollout_provenance_version={_ROLLOUT_PROVENANCE_VERSION!r}"
             )
         if record.get("rollout_digest_algorithm") != _ROLLOUT_DIGEST_ALGORITHM:
             issues.invalid(
-                f"{label} must preserve rollout_digest_algorithm="
-                f"{_ROLLOUT_DIGEST_ALGORITHM!r}"
+                f"{label} must preserve rollout_digest_algorithm={_ROLLOUT_DIGEST_ALGORITHM!r}"
             )
         step = record.get("step")
         rollout_seed = record.get("rollout_seed")
@@ -625,12 +631,226 @@ def _validate_rollout_provenance(
             combined.update(bytes.fromhex(valid_digests["rollout_token_digest"]))
             combined.update(bytes.fromhex(valid_digests["behavior_logprob_digest"]))
             if valid_digests["rollout_digest"] != combined.hexdigest():
-                issues.invalid(f"{label} rollout_digest does not bind its seed and component digests")
+                issues.invalid(
+                    f"{label} rollout_digest does not bind its seed and component digests"
+                )
         combined = record.get("rollout_digest")
         if isinstance(combined, str) and _SHA256_HEX.fullmatch(combined):
             if combined in observed_digests:
                 issues.invalid(f"{label} repeats an earlier rollout_digest despite a new seed")
             observed_digests.add(combined)
+
+
+def _record_nonnegative_int(
+    record: Mapping[str, Any],
+    key: str,
+    label: str,
+    issues: _Issues,
+) -> int | None:
+    value = record.get(key)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        issues.invalid(f"{label} {key} must be a non-negative integer")
+        return None
+    return value
+
+
+def _validate_focus_ablation_records(
+    train_records: Sequence[Mapping[str, Any]],
+    run: ExpectedRun,
+    config: Mapping[str, Any],
+    issues: _Issues,
+) -> None:
+    """Recompute the optional FOCUS audit trail from publishable raw records."""
+
+    if run.method.strip().lower() != "fo_focus_npg":
+        return
+    forward = config.get("forward")
+    focus = config.get("focus")
+    if not isinstance(forward, Mapping):
+        issues.invalid(f"{run.label} config.forward must define the FOCUS probe budget")
+        return
+    if not isinstance(focus, Mapping):
+        issues.invalid(f"{run.label} config.focus must define the cross-sketch state")
+        return
+
+    directions = forward.get("directions")
+    family_rank = focus.get("family_rank")
+    line_search_steps = forward.get("line_search_steps")
+    forward_micro_batch = forward.get("scoring_micro_batch_size")
+    old_score_micro_batch = config.get("scoring_micro_batch_size")
+    adapter_parameters = config.get("expected_lora_parameter_count")
+    batch_size = config.get("batch_size")
+    group_size = config.get("group_size")
+    integer_config = {
+        "forward.directions": directions,
+        "focus.family_rank": family_rank,
+        "forward.line_search_steps": line_search_steps,
+        "forward.scoring_micro_batch_size": forward_micro_batch,
+        "scoring_micro_batch_size": old_score_micro_batch,
+        "expected_lora_parameter_count": adapter_parameters,
+        "batch_size": batch_size,
+        "group_size": group_size,
+    }
+    invalid_config = False
+    for name, value in integer_config.items():
+        if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+            issues.invalid(f"{run.label} config.{name} must be a positive integer")
+            invalid_config = True
+    if invalid_config:
+        return
+    assert isinstance(directions, int)
+    assert isinstance(family_rank, int)
+    assert isinstance(line_search_steps, int)
+    assert isinstance(forward_micro_batch, int)
+    assert isinstance(old_score_micro_batch, int)
+    assert isinstance(adapter_parameters, int)
+    assert isinstance(batch_size, int)
+    assert isinstance(group_size, int)
+    if directions != 8:
+        issues.invalid(f"{run.label} FOCUS requires q=8, not q={directions}")
+    if family_rank != 2:
+        issues.invalid(f"{run.label} FOCUS requires rank-two state per LoRA family")
+    if batch_size < 2 or batch_size % 2:
+        issues.invalid(f"{run.label} FOCUS requires an even prompt batch of at least two")
+
+    responses_per_step = batch_size * group_size
+    probe_evaluations = 2 * directions
+    old_score_calls = math.ceil(responses_per_step / old_score_micro_batch)
+    probe_micro_batches = math.ceil(responses_per_step / forward_micro_batch)
+    expected_state_cap = adapter_parameters * family_rank + 2 * family_rank
+    previous = {
+        "environment_samples": 0,
+        "generated_tokens": 0,
+        "scored_tokens": 0,
+        "forward_calls": 0,
+        "teacher_forced_examples": 0,
+    }
+    bootstrap_count = 0
+    for record_index, record in enumerate(train_records, start=1):
+        label = f"{run.label} FOCUS train-step record {record_index}"
+        step = _record_nonnegative_int(record, "step", label, issues)
+        if step != record_index:
+            issues.invalid(f"{label} step must be the contiguous value {record_index}")
+
+        bootstrap = record.get("focus_bootstrap_b_only")
+        if not isinstance(bootstrap, bool):
+            issues.invalid(f"{label} focus_bootstrap_b_only must be boolean")
+            bootstrap = False
+        else:
+            bootstrap_count += int(bootstrap)
+            if bootstrap != (record_index == 1):
+                issues.invalid(f"{label} must use one B-only bootstrap at step one")
+
+        a_updates = _record_nonnegative_int(record, "focus_a_update_count", label, issues)
+        b_updates = _record_nonnegative_int(record, "focus_b_update_count", label, issues)
+        if a_updates is not None and a_updates != record_index - 1:
+            issues.invalid(f"{label} A-state update count must equal step minus one")
+        if b_updates is not None and b_updates != record_index:
+            issues.invalid(f"{label} B-state update count must equal step")
+
+        ranks: list[int] = []
+        for rank_key in ("focus_a_rank", "focus_b_rank"):
+            rank = _record_nonnegative_int(record, rank_key, label, issues)
+            if rank is not None:
+                ranks.append(rank)
+                if rank > family_rank:
+                    issues.invalid(f"{label} {rank_key} exceeds the configured rank cap")
+
+        first_half = _record_nonnegative_int(record, "focus_first_half_prompts", label, issues)
+        second_half = _record_nonnegative_int(record, "focus_second_half_prompts", label, issues)
+        if first_half is not None and first_half != batch_size // 2:
+            issues.invalid(f"{label} first prompt half has the wrong size")
+        if second_half is not None and second_half != batch_size // 2:
+            issues.invalid(f"{label} second prompt half has the wrong size")
+        if (
+            first_half is not None
+            and second_half is not None
+            and (first_half + second_half != batch_size)
+        ):
+            issues.invalid(f"{label} prompt halves do not partition the configured batch")
+
+        sketches = _record_nonnegative_int(record, "focus_cross_sketch_count", label, issues)
+        expected_sketches = 1 if record_index == 1 else 2
+        if sketches is not None and sketches != expected_sketches:
+            issues.invalid(f"{label} cross-sketch family count must be {expected_sketches}")
+        state_numel = _record_nonnegative_int(record, "focus_state_numel", label, issues)
+        state_cap = _record_nonnegative_int(record, "focus_state_numel_cap", label, issues)
+        if state_cap is not None and state_cap != expected_state_cap:
+            issues.invalid(f"{label} state cap does not match rank * P plus eigenvalues")
+        if state_numel is not None and state_numel > expected_state_cap:
+            issues.invalid(f"{label} state exceeds the independently recomputed storage cap")
+        if state_numel is not None and len(ranks) == 2:
+            minimum_state = sum(ranks)
+            if state_numel < minimum_state or (state_numel == 0) != (minimum_state == 0):
+                issues.invalid(f"{label} state size is inconsistent with its family ranks")
+
+        state_policy_evaluations = _record_nonnegative_int(
+            record,
+            "focus_state_update_policy_evaluations",
+            label,
+            issues,
+        )
+        if state_policy_evaluations is not None and state_policy_evaluations != 0:
+            issues.invalid(f"{label} cross-sketch update used extra policy evaluations")
+        trials = _record_nonnegative_int(record, "line_search_trials", label, issues)
+        if trials is not None and trials > line_search_steps:
+            issues.invalid(f"{label} line-search trials exceed the configured maximum")
+        policy_evaluations = _record_nonnegative_int(record, "policy_evaluations", label, issues)
+        if (
+            trials is not None
+            and policy_evaluations is not None
+            and (policy_evaluations != probe_evaluations + trials)
+        ):
+            issues.invalid(f"{label} policy evaluations are not q8 probes plus line search")
+
+        backward_calls = _record_nonnegative_int(record, "backward_calls", label, issues)
+        if backward_calls is not None and backward_calls != 0:
+            issues.invalid(f"{label} reports a backward call in strict inference-only FOCUS")
+        counters = {key: _record_nonnegative_int(record, key, label, issues) for key in previous}
+        if any(value is None for value in counters.values()):
+            continue
+        resolved = {key: int(value) for key, value in counters.items()}
+        deltas = {key: resolved[key] - previous[key] for key in previous}
+        if any(value < 0 for value in deltas.values()):
+            issues.invalid(f"{label} cumulative compute counters decrease")
+        if deltas["environment_samples"] != responses_per_step:
+            issues.invalid(f"{label} environment-sample delta differs from B * G")
+        generated_delta = deltas["generated_tokens"]
+        if generated_delta < responses_per_step:
+            issues.invalid(f"{label} generated-token delta is smaller than the response count")
+
+        old_calls = _record_nonnegative_int(
+            record, "old_policy_rescore_forward_calls", label, issues
+        )
+        old_examples = _record_nonnegative_int(
+            record, "old_policy_rescore_teacher_forced_examples", label, issues
+        )
+        old_tokens = _record_nonnegative_int(
+            record, "old_policy_rescore_scored_tokens", label, issues
+        )
+        if old_calls is not None and old_calls != old_score_calls:
+            issues.invalid(f"{label} old-policy rescore call count is inconsistent")
+        if old_examples is not None and old_examples != responses_per_step:
+            issues.invalid(f"{label} old-policy rescore example count is inconsistent")
+        if old_tokens is not None and old_tokens != generated_delta:
+            issues.invalid(f"{label} old-policy scored tokens differ from rollout tokens")
+        if policy_evaluations is not None:
+            expected_forward_delta = old_score_calls + policy_evaluations * probe_micro_batches
+            expected_example_delta = responses_per_step * (1 + policy_evaluations)
+            expected_scored_delta = generated_delta * (1 + policy_evaluations)
+            if deltas["forward_calls"] != expected_forward_delta:
+                issues.invalid(f"{label} forward-call delta includes unaccounted evaluations")
+            if deltas["teacher_forced_examples"] != expected_example_delta:
+                issues.invalid(f"{label} teacher-forced example delta is inconsistent")
+            if deltas["scored_tokens"] != expected_scored_delta:
+                issues.invalid(f"{label} scored-token delta includes unaccounted evaluations")
+        previous = resolved
+
+    if bootstrap_count != 1:
+        issues.invalid(
+            f"{run.label} FOCUS must contain exactly one B-only bootstrap; "
+            f"observed {bootstrap_count}"
+        )
 
 
 def _validate_run_records(
@@ -655,13 +875,13 @@ def _validate_run_records(
     train_records = [record for record in records if record.get("kind") == "train_step"]
     evaluations = [record for record in records if record.get("kind") == "evaluation"]
     unknown_kinds = sorted(
-        {str(record.get("kind")) for record in records}
-        - {"train_step", "evaluation"}
+        {str(record.get("kind")) for record in records} - {"train_step", "evaluation"}
     )
     if unknown_kinds:
         issues.invalid(f"{run.label} has unsupported record kinds: {unknown_kinds}")
 
     _validate_rollout_provenance(train_records, run, config, issues)
+    _validate_focus_ablation_records(train_records, run, config, issues)
 
     expected_train = 0 if run.is_base else int(config["steps"])
     if len(train_records) < expected_train:
@@ -686,7 +906,10 @@ def _validate_run_records(
             f"expected {len(expected_validation_steps)}"
         )
     observed_validation_steps = [record.get("step") for record in validation]
-    if len(validation) >= len(expected_validation_steps) and observed_validation_steps != expected_validation_steps:
+    if (
+        len(validation) >= len(expected_validation_steps)
+        and observed_validation_steps != expected_validation_steps
+    ):
         issues.invalid(
             f"{run.label} validation steps {observed_validation_steps} do not match "
             f"expected {expected_validation_steps}"
@@ -696,7 +919,9 @@ def _validate_run_records(
     if len(test) < expected_test:
         issues.missing(f"{run.label} is missing its explicit official-test evaluation")
     elif len(test) > expected_test:
-        issues.invalid(f"{run.label} has {len(test)} official-test evaluations; expected {expected_test}")
+        issues.invalid(
+            f"{run.label} has {len(test)} official-test evaluations; expected {expected_test}"
+        )
     if expected_test and test:
         _validate_selection_record(test[0], run, config, issues)
 
@@ -708,7 +933,10 @@ def _validate_run_records(
     )
     if final_environment_samples is None:
         issues.missing(f"{run.label} has no final environment_samples counter")
-    elif final_environment_samples < expected_environment_samples and len(train_records) < expected_train:
+    elif (
+        final_environment_samples < expected_environment_samples
+        and len(train_records) < expected_train
+    ):
         issues.missing(
             f"{run.label} environment budget is incomplete: "
             f"{final_environment_samples:g}/{expected_environment_samples}"
@@ -723,7 +951,9 @@ def _validate_run_records(
         observed_backward = 0
         for index, record in enumerate(records, start=1):
             if "backward_calls" not in record:
-                issues.invalid(f"{run.label} record {index} is missing backward_calls audit counter")
+                issues.invalid(
+                    f"{run.label} record {index} is missing backward_calls audit counter"
+                )
                 continue
             value = _numeric(record.get("backward_calls"))
             if value is None:
@@ -761,9 +991,7 @@ def _validate_wandb(output: Path, expected_count: int, issues: _Issues) -> None:
     wandb_dir = output / "wandb"
     run_dirs = sorted(path for path in wandb_dir.glob("offline-run-*") if path.is_dir())
     if len(run_dirs) < expected_count:
-        issues.missing(
-            f"W&B has {len(run_dirs)}/{expected_count} expected offline-run directories"
-        )
+        issues.missing(f"W&B has {len(run_dirs)}/{expected_count} expected offline-run directories")
     elif len(run_dirs) > expected_count:
         issues.invalid(
             f"W&B has {len(run_dirs)} offline-run directories; expected exactly {expected_count} "
@@ -783,7 +1011,9 @@ def _validate_wandb(output: Path, expected_count: int, issues: _Issues) -> None:
             started = "run started" in debug_text
             finished = "finishing run" in debug_text or "got exitcode: 0" in debug_text
             if started and not finished:
-                issues.missing(f"W&B offline run has started but not finished cleanly: {directory.name}")
+                issues.missing(
+                    f"W&B offline run has started but not finished cleanly: {directory.name}"
+                )
 
 
 def _compare_embedded_config(
@@ -796,7 +1026,11 @@ def _compare_embedded_config(
         "steps",
         "batch_size",
         "group_size",
+        "scoring_micro_batch_size",
         "eval_interval",
+        "expected_lora_parameter_count",
+        "forward",
+        "focus",
         "run_test_evaluation",
         "test_size",
         "wandb_mode",
@@ -951,7 +1185,9 @@ def validate_benchmark_artifacts(
         if directory.is_dir():
             extras = sorted(path for path in directory.glob(f"*{suffix}") if path not in matched)
             if extras:
-                issues.invalid(f"unexpected {label} artifacts could contaminate the sweep: {extras}")
+                issues.invalid(
+                    f"unexpected {label} artifacts could contaminate the sweep: {extras}"
+                )
 
     _validate_wandb(output, len(expected_runs), issues)
     status = "incomplete" if issues.incomplete else "invalid" if issues.errors else "complete"

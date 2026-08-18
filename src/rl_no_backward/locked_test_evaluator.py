@@ -15,10 +15,11 @@ import hashlib
 import json
 import math
 import platform
+import stat
 import subprocess
 import time
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from importlib import metadata as importlib_metadata
 from pathlib import Path
 from typing import Any
@@ -29,7 +30,6 @@ from torch import Tensor, nn
 from .evaluation_manifest import (
     EvaluationSplitManifest,
     load_evaluation_split_manifest,
-    validate_evaluation_split_manifest,
 )
 from .gsm8k import (
     GSM8K_DATASET_CONFIG,
@@ -38,6 +38,19 @@ from .gsm8k import (
     exact_match_reward,
     extract_model_answer,
     format_prompt,
+)
+from .locked_source_sealing import (
+    FINAL_PRIOR_METADATA_SOURCES,
+    FINAL_PRIOR_QUESTION_SOURCES,
+    LOCKED_SOURCE_INDEX_SCHEMA,
+    PINNED_GSM8K_REVISION,
+    LockedSourceIndexEntry,
+    LockedSourceIndexReceipt,
+    gsm8k_question_id,
+    inspect_prior_question_evidence,
+    load_locked_source_index_receipt,
+    validate_locked_source_audit,
+    write_locked_source_index_receipt,
 )
 from .standard_lora import (
     StandardLoRAConfig,
@@ -49,12 +62,25 @@ from .standard_lora import (
 )
 from .vllm_lora_rollout import ReloadableLoRAGenerator, create_standard_lora_vllm_engine
 
-LOCKED_SOURCE_INDEX_SCHEMA = "rl-no-backward-gsm8k-locked-source-index-v1"
 LOCKED_EVALUATION_PLAN_SCHEMA = "rl-no-backward-locked-evaluation-plan-v1"
 LOCKED_EVALUATION_RESULT_SCHEMA = "rl-no-backward-locked-evaluation-result-v1"
 LOCKED_CONSUMPTION_SCHEMA = "rl-no-backward-locked-consumption-v1"
 EXPECTED_LOCKED_TEST_COUNT = 679
+EXPECTED_OFFICIAL_TEST_COUNT = 1_319
+EXPECTED_EXCLUDED_TEST_COUNT = 384
+EXPECTED_DEV_COUNT = 256
 EXPECTED_METHODS = ("base", "bp_grpo", "fo_npg")
+EXPECTED_SEEDS = (0, 1, 2)
+EXPECTED_POLICY_PAIRS = (
+    ("base", 0),
+    ("bp_grpo", 0),
+    ("fo_npg", 0),
+    ("bp_grpo", 1),
+    ("fo_npg", 1),
+    ("bp_grpo", 2),
+    ("fo_npg", 2),
+)
+EXPECTED_DATASET_REVISION = PINNED_GSM8K_REVISION
 _HEX_DIGITS = frozenset("0123456789abcdef")
 
 
@@ -125,202 +151,14 @@ def _git_output(*args: str, worktree: Path | None = None) -> str | None:
         return None
 
 
-@dataclass(frozen=True, slots=True)
-class LockedSourceIndexEntry:
-    source_index: int
-    example_id: str
-
-    def __post_init__(self) -> None:
-        if (
-            isinstance(self.source_index, bool)
-            or not isinstance(self.source_index, int)
-            or self.source_index < 0
-        ):
-            raise ValueError("source_index must be a non-negative integer")
-        if not isinstance(self.example_id, str) or not self.example_id:
-            raise ValueError("example_id must be a non-empty string")
-
-    def as_dict(self) -> dict[str, Any]:
-        return {"source_index": self.source_index, "example_id": self.example_id}
-
-
-@dataclass(frozen=True, slots=True)
-class LockedSourceIndexReceipt:
-    """Answer-free mapping from the committed locked IDs to Arrow row indices."""
-
-    dataset_id: str
-    dataset_config: str
-    dataset_revision: str
-    evaluation_manifest_sha256: str
-    official_test_count: int
-    locked_test_count: int
-    entries: tuple[LockedSourceIndexEntry, ...]
-    receipt_sha256: str
-
-    def __post_init__(self) -> None:
-        if self.dataset_id != GSM8K_DATASET_ID or self.dataset_config != GSM8K_DATASET_CONFIG:
-            raise ValueError("locked source receipt is not for pinned GSM8K main")
-        if not isinstance(self.dataset_revision, str) or not self.dataset_revision:
-            raise ValueError("dataset_revision must be non-empty")
-        _sha256(self.evaluation_manifest_sha256, name="evaluation_manifest_sha256")
-        _positive_int(self.official_test_count, name="official_test_count")
-        _positive_int(self.locked_test_count, name="locked_test_count")
-        if len(self.entries) != self.locked_test_count:
-            raise ValueError("locked source receipt count differs from its entries")
-        indices = tuple(entry.source_index for entry in self.entries)
-        ids = tuple(entry.example_id for entry in self.entries)
-        if len(set(indices)) != len(indices) or len(set(ids)) != len(ids):
-            raise ValueError("locked source receipt contains duplicate indices or IDs")
-        if any(index >= self.official_test_count for index in indices):
-            raise ValueError("locked source receipt contains an out-of-range index")
-        _sha256(self.receipt_sha256, name="receipt_sha256")
-        if self.receipt_sha256 != _json_digest(self.payload_without_digest()):
-            raise ValueError("locked source receipt digest is invalid")
-
-    def payload_without_digest(self) -> dict[str, Any]:
-        return {
-            "schema": LOCKED_SOURCE_INDEX_SCHEMA,
-            "dataset_id": self.dataset_id,
-            "dataset_config": self.dataset_config,
-            "dataset_revision": self.dataset_revision,
-            "evaluation_manifest_sha256": self.evaluation_manifest_sha256,
-            "official_test_count": self.official_test_count,
-            "locked_test_count": self.locked_test_count,
-            "entries": [entry.as_dict() for entry in self.entries],
-        }
-
-    def as_dict(self) -> dict[str, Any]:
-        payload = self.payload_without_digest()
-        payload["receipt_sha256"] = self.receipt_sha256
-        return payload
-
-    def validate_manifest(
-        self,
-        manifest: EvaluationSplitManifest,
-        *,
-        dataset_revision: str,
-    ) -> None:
-        if (
-            self.dataset_revision != dataset_revision
-            or self.evaluation_manifest_sha256 != manifest.manifest_sha256
-            or self.official_test_count != manifest.official_test_count
-            or self.locked_test_count != manifest.locked_test_count
-        ):
-            raise ValueError("locked source receipt does not bind the pinned dataset/manifest")
-        if tuple(entry.example_id for entry in self.entries) != manifest.locked_test_example_ids:
-            raise ValueError("locked source receipt IDs differ from the manifest locked order")
-
-    @classmethod
-    def from_mapping(cls, value: Mapping[str, Any]) -> LockedSourceIndexReceipt:
-        expected = {
-            "schema",
-            "dataset_id",
-            "dataset_config",
-            "dataset_revision",
-            "evaluation_manifest_sha256",
-            "official_test_count",
-            "locked_test_count",
-            "entries",
-            "receipt_sha256",
-        }
-        if set(value) != expected:
-            raise ValueError("locked source receipt has missing or unknown fields")
-        if value["schema"] != LOCKED_SOURCE_INDEX_SCHEMA:
-            raise ValueError("unsupported locked source receipt schema")
-        raw_entries = value["entries"]
-        if not isinstance(raw_entries, list) or any(
-            not isinstance(entry, Mapping) or set(entry) != {"source_index", "example_id"}
-            for entry in raw_entries
-        ):
-            raise TypeError("locked source receipt entries are malformed")
-        return cls(
-            dataset_id=value["dataset_id"],
-            dataset_config=value["dataset_config"],
-            dataset_revision=value["dataset_revision"],
-            evaluation_manifest_sha256=value["evaluation_manifest_sha256"],
-            official_test_count=value["official_test_count"],
-            locked_test_count=value["locked_test_count"],
-            entries=tuple(
-                LockedSourceIndexEntry(
-                    source_index=entry["source_index"],
-                    example_id=entry["example_id"],
-                )
-                for entry in raw_entries
-            ),
-            receipt_sha256=value["receipt_sha256"],
-        )
-
-
-def build_locked_source_index_receipt(
-    manifest: EvaluationSplitManifest,
-    official_test_example_ids: Sequence[str],
-    *,
-    dataset_revision: str,
-) -> LockedSourceIndexReceipt:
-    """Build an answer-free index receipt from an already available ordered ID list.
-
-    This function never loads GSM8K.  Constructing ``official_test_example_ids``
-    is intentionally left to the separately authorized data-sealing workflow.
-    """
-
-    validate_evaluation_split_manifest(manifest, official_test_example_ids)
-    by_id = {example_id: index for index, example_id in enumerate(official_test_example_ids)}
-    entries = tuple(
-        LockedSourceIndexEntry(source_index=by_id[example_id], example_id=example_id)
-        for example_id in manifest.locked_test_example_ids
-    )
-    payload = {
-        "schema": LOCKED_SOURCE_INDEX_SCHEMA,
-        "dataset_id": GSM8K_DATASET_ID,
-        "dataset_config": GSM8K_DATASET_CONFIG,
-        "dataset_revision": dataset_revision,
-        "evaluation_manifest_sha256": manifest.manifest_sha256,
-        "official_test_count": manifest.official_test_count,
-        "locked_test_count": manifest.locked_test_count,
-        "entries": [entry.as_dict() for entry in entries],
-    }
-    return LockedSourceIndexReceipt(
-        dataset_id=GSM8K_DATASET_ID,
-        dataset_config=GSM8K_DATASET_CONFIG,
-        dataset_revision=dataset_revision,
-        evaluation_manifest_sha256=manifest.manifest_sha256,
-        official_test_count=manifest.official_test_count,
-        locked_test_count=manifest.locked_test_count,
-        entries=entries,
-        receipt_sha256=_json_digest(payload),
-    )
-
-
-def load_locked_source_index_receipt(
-    path: str | Path,
-    manifest: EvaluationSplitManifest,
-    *,
-    dataset_revision: str,
-) -> LockedSourceIndexReceipt:
-    receipt = LockedSourceIndexReceipt.from_mapping(_load_json_mapping(path))
-    receipt.validate_manifest(manifest, dataset_revision=dataset_revision)
-    return receipt
-
-
-def write_locked_source_index_receipt(
-    path: str | Path,
-    receipt: LockedSourceIndexReceipt,
-) -> Path:
-    target = Path(path)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    payload = (
-        json.dumps(receipt.as_dict(), ensure_ascii=False, allow_nan=False, sort_keys=True, indent=2)
-        + "\n"
-    )
-    try:
-        with target.open("x", encoding="utf-8") as handle:
-            handle.write(payload)
-    except FileExistsError:
-        if target.read_text(encoding="utf-8") != payload:
-            raise FileExistsError(
-                f"refusing to overwrite locked source receipt: {target}"
-            ) from None
-    return target
+def _reject_symlinked_input(path: str | Path, *, name: str) -> Path:
+    absolute = Path(path).absolute()
+    cursor = Path(absolute.anchor)
+    for component in absolute.parts[1:]:
+        cursor = cursor / component
+        if cursor.is_symlink():
+            raise ValueError(f"{name} must not traverse a symlink: {cursor}")
+    return absolute
 
 
 def _selection_and_checkpoint_receipt(
@@ -333,6 +171,15 @@ def _selection_and_checkpoint_receipt(
     label = f"gsm8k_{method}_seed{seed}"
     selection_path = benchmark_output / "selection" / f"{label}.json"
     checkpoint_path = benchmark_output / "checkpoints" / f"{label}.pt"
+    raw_path = benchmark_output / "raw" / f"{label}.jsonl"
+    learning_gate_path = benchmark_output / "learning_gate" / f"{label}.json"
+    for artifact_name, artifact_path in (
+        ("selection receipt", selection_path),
+        ("selected checkpoint", checkpoint_path),
+        ("raw training log", raw_path),
+        ("learning-gate receipt", learning_gate_path),
+    ):
+        _require_regular_file_within(artifact_path, benchmark_output, name=artifact_name)
     selection = _load_json_mapping(selection_path)
     expected_selection_keys = {
         "schema",
@@ -355,7 +202,7 @@ def _selection_and_checkpoint_receipt(
         or selection["selection_split"] != "development"
         or selection["selection_metric"] != "exact_match"
         or selection["tie_breaker"] != "latest_checkpoint"
-        or Path(selection["checkpoint_path"]).name != checkpoint_path.name
+        or Path(selection["checkpoint_path"]).resolve() != checkpoint_path.resolve()
     ):
         raise ValueError(f"{label} selection receipt violates the frozen selection contract")
     selected_step = selection["selected_step"]
@@ -373,6 +220,86 @@ def _selection_and_checkpoint_receipt(
         selection["selected_lora_state_digest"], name="selected_lora_state_digest"
     )
 
+    raw_records: list[dict[str, Any]] = []
+    for line_number, line in enumerate(raw_path.read_text(encoding="utf-8").splitlines(), start=1):
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError as error:
+            raise ValueError(f"{label} raw log line {line_number} is invalid JSON") from error
+        if not isinstance(record, Mapping):
+            raise TypeError(f"{label} raw log line {line_number} is not an object")
+        raw_records.append(dict(record))
+    evaluations = [
+        record
+        for record in raw_records
+        if record.get("kind") == "evaluation" and record.get("split") == "validation"
+    ]
+    if not evaluations:
+        raise ValueError(f"{label} raw log contains no development evaluations")
+    evaluation_steps: set[int] = set()
+    scored_evaluations: list[tuple[float, int]] = []
+    for record in evaluations:
+        step = record.get("step")
+        val_accuracy = record.get("val_accuracy")
+        if (
+            record.get("method") != method
+            or record.get("seed") != seed
+            or isinstance(step, bool)
+            or not isinstance(step, int)
+            or step < 0
+            or step in evaluation_steps
+            or isinstance(val_accuracy, bool)
+            or not isinstance(val_accuracy, (int, float))
+            or not math.isfinite(float(val_accuracy))
+            or not 0.0 <= float(val_accuracy) <= 1.0
+        ):
+            raise ValueError(f"{label} raw development evaluation is malformed or duplicated")
+        evaluation_steps.add(step)
+        scored_evaluations.append((float(val_accuracy), step))
+    recomputed_accuracy, recomputed_step = max(scored_evaluations)
+    if recomputed_step != selected_step or recomputed_accuracy != float(accuracy):
+        raise ValueError(
+            f"{label} selection is not latest-step max development accuracy: "
+            f"expected step={recomputed_step}, accuracy={recomputed_accuracy}"
+        )
+    if method == "base" and (selected_step != 0 or evaluation_steps != {0}):
+        raise ValueError(f"{label} baseline must be the single non-updating step-zero policy")
+
+    learning_gate = _load_json_mapping(learning_gate_path)
+    structural_checks = learning_gate.get("hard_structural_checks")
+    if not isinstance(structural_checks, Mapping) or any(
+        value is not None and not isinstance(value, bool) for value in structural_checks.values()
+    ):
+        raise ValueError(f"{label} learning-gate structural checks are malformed")
+    expected_failed_structural = sorted(
+        name for name, value in structural_checks.items() if value is not None and value is not True
+    )
+    identity_is_valid = (
+        learning_gate.get("role") == "non-updating baseline"
+        and "method" not in learning_gate
+        and "seed" not in learning_gate
+        if method == "base"
+        else learning_gate.get("method") == method and learning_gate.get("seed") == seed
+    )
+    if (
+        learning_gate.get("schema") != "rl-no-backward-matched-learning-gate-v2"
+        or not identity_is_valid
+        or learning_gate.get("passed") is not True
+        or learning_gate.get("hard_structural_checks_passed")
+        is not (not expected_failed_structural)
+        or learning_gate.get("failed_hard_structural_checks") != expected_failed_structural
+        or expected_failed_structural
+    ):
+        raise ValueError(f"{label} learning-gate receipt is not structurally passing")
+    best_dev_accuracy = learning_gate.get("best_dev_accuracy")
+    if method != "base" and (
+        isinstance(best_dev_accuracy, bool)
+        or not isinstance(best_dev_accuracy, (int, float))
+        or not math.isfinite(float(best_dev_accuracy))
+        or float(best_dev_accuracy) != float(accuracy)
+    ):
+        raise ValueError(f"{label} learning gate differs from recomputed selected dev accuracy")
+
     payload = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
     expected_checkpoint_keys = {
         "method",
@@ -383,11 +310,15 @@ def _selection_and_checkpoint_receipt(
     }
     if not isinstance(payload, Mapping) or set(payload) != expected_checkpoint_keys:
         raise ValueError(f"{label} checkpoint has missing or unknown fields")
+    checkpoint_accuracy = payload.get("selection_val_accuracy")
     if (
         payload["method"] != method
         or payload["seed"] != seed
         or payload["selected_step"] != selected_step
-        or float(payload["selection_val_accuracy"]) != float(accuracy)
+        or isinstance(checkpoint_accuracy, bool)
+        or not isinstance(checkpoint_accuracy, (int, float))
+        or not math.isfinite(float(checkpoint_accuracy))
+        or float(checkpoint_accuracy) != float(accuracy)
     ):
         raise ValueError(f"{label} checkpoint differs from its selection receipt")
     state = payload["lora_state"]
@@ -427,6 +358,12 @@ def _selection_and_checkpoint_receipt(
         "selection_file_sha256": _file_digest(selection_path),
         "checkpoint_relpath": str(checkpoint_path.relative_to(benchmark_output)),
         "checkpoint_file_sha256": _file_digest(checkpoint_path),
+        "raw_relpath": str(raw_path.relative_to(benchmark_output)),
+        "raw_file_sha256": _file_digest(raw_path),
+        "raw_development_evaluation_count": len(evaluations),
+        "recomputed_selection_rule": "maximum val_accuracy, latest step on exact tie",
+        "learning_gate_relpath": str(learning_gate_path.relative_to(benchmark_output)),
+        "learning_gate_file_sha256": _file_digest(learning_gate_path),
     }
 
 
@@ -442,19 +379,15 @@ def _validate_training_metadata(
     seeds = config.get("seeds")
     if not isinstance(methods, list) or tuple(methods) != EXPECTED_METHODS:
         raise ValueError(f"locked evaluation requires methods {list(EXPECTED_METHODS)}")
-    if (
-        not isinstance(seeds, list)
-        or not seeds
-        or any(isinstance(seed, bool) or not isinstance(seed, int) for seed in seeds)
-        or len(set(seeds)) != len(seeds)
-    ):
-        raise ValueError("benchmark seeds must be a non-empty unique integer list")
+    if not isinstance(seeds, list) or tuple(seeds) != EXPECTED_SEEDS:
+        raise ValueError(f"locked evaluation requires exact seeds {list(EXPECTED_SEEDS)}")
     if (
         metadata.get("schema_version") != 1
         or metadata.get("git_dirty") is not False
         or metadata.get("dataset_id") != GSM8K_DATASET_ID
         or metadata.get("dataset_config") != GSM8K_DATASET_CONFIG
         or metadata.get("dataset_revision") != config.get("dataset_revision")
+        or config.get("dataset_revision") != EXPECTED_DATASET_REVISION
         or metadata.get("model_name") != config.get("model_name")
         or metadata.get("model_revision") != config.get("model_revision")
     ):
@@ -464,10 +397,18 @@ def _validate_training_metadata(
         raise ValueError("benchmark metadata has no resolved model snapshot")
     if (
         metadata.get("evaluation_manifest_sha256") != manifest.manifest_sha256
+        or metadata.get("evaluation_manifest_dev_ids_sha256") != manifest.dev_ids_sha256
         or metadata.get("evaluation_manifest_locked_test_ids_sha256")
         != manifest.locked_test_ids_sha256
+        or metadata.get("val_example_ids") != list(manifest.dev_example_ids)
+        or metadata.get("excluded_test_example_ids") != list(manifest.excluded_test_example_ids)
     ):
         raise ValueError("benchmark metadata differs from the locked evaluation manifest")
+    if (
+        config.get("dev_size") != EXPECTED_DEV_COUNT
+        or metadata.get("development_row_loading") != "Dataset.select(committed_dev_source_indices)"
+    ):
+        raise ValueError("training metadata does not certify the complete committed dev split")
     if (
         metadata.get("test_example_ids") != []
         or metadata.get("locked_test_rows_materialized") is not False
@@ -520,6 +461,7 @@ def _validate_training_metadata(
 
 
 def _require_committed_file(path: Path, worktree: Path) -> None:
+    _require_regular_file_within(path, worktree, name="locked input")
     try:
         relative = path.resolve().relative_to(worktree.resolve())
     except ValueError as error:
@@ -535,19 +477,220 @@ def _require_committed_file(path: Path, worktree: Path) -> None:
         raise RuntimeError(f"locked input differs from HEAD: {relative}")
 
 
+def _require_regular_file_within(path: Path, root: Path, *, name: str) -> Path:
+    """Reject missing, non-regular, symlinked, or root-escaping artifact paths."""
+
+    root = root.resolve()
+    try:
+        relative = path.absolute().relative_to(root)
+    except ValueError as error:
+        raise ValueError(f"{name} escapes its allowed root: {path}") from error
+    cursor = root
+    for component in relative.parts:
+        cursor = cursor / component
+        if cursor.is_symlink():
+            raise ValueError(f"{name} must not traverse a symlink: {cursor}")
+    try:
+        resolved = path.resolve(strict=True)
+    except FileNotFoundError:
+        raise FileNotFoundError(f"{name} does not exist: {path}") from None
+    try:
+        resolved.relative_to(root)
+    except ValueError as error:
+        raise ValueError(f"{name} resolves outside its allowed root: {path}") from error
+    if not stat.S_ISREG(resolved.stat().st_mode):
+        raise ValueError(f"{name} must be a regular file: {path}")
+    return resolved
+
+
+def _resolve_config_input_path(raw_path: Any, worktree: Path, *, name: str) -> Path:
+    if not isinstance(raw_path, str) or not raw_path.strip():
+        raise ValueError(f"{name} must be a non-empty relative path")
+    relative = Path(raw_path)
+    if relative.is_absolute() or ".." in relative.parts:
+        raise ValueError(f"{name} must not be absolute or contain '..'")
+    return _require_regular_file_within(worktree / relative, worktree, name=name)
+
+
+def _validate_bound_split_inputs(
+    config: Mapping[str, Any],
+    metadata: Mapping[str, Any],
+    manifest: EvaluationSplitManifest,
+    receipt: LockedSourceIndexReceipt,
+    source_audit: Mapping[str, Any],
+    manifest_target: Path,
+    worktree: Path,
+) -> dict[str, Any]:
+    """Bind training dev/quarantine inputs to the answer-free source seal."""
+
+    config_manifest = _resolve_config_input_path(
+        config.get("evaluation_manifest"), worktree, name="config evaluation_manifest"
+    )
+    if config_manifest != manifest_target.resolve():
+        raise ValueError("training config evaluation manifest differs from the authorized manifest")
+    dev_path = _resolve_config_input_path(
+        config.get("dev_source_index_receipt"),
+        worktree,
+        name="config dev_source_index_receipt",
+    )
+    quarantine_path = _resolve_config_input_path(
+        config.get("touched_test_exclusions"),
+        worktree,
+        name="config touched_test_exclusions",
+    )
+    dev = _load_json_mapping(dev_path)
+    if set(dev) != {
+        "schema",
+        "dataset_id",
+        "dataset_config",
+        "dataset_revision",
+        "evaluation_manifest_sha256",
+        "official_test_count",
+        "dev_count",
+        "entries",
+        "receipt_sha256",
+    }:
+        raise ValueError("committed development source receipt has unknown or missing fields")
+    dev_payload = {key: value for key, value in dev.items() if key != "receipt_sha256"}
+    dev_receipt_sha = dev.get("receipt_sha256")
+    if not isinstance(dev_receipt_sha, str) or dev_receipt_sha != _json_digest(dev_payload):
+        raise ValueError("committed development source receipt digest is invalid")
+    entries = dev.get("entries")
+    if not isinstance(entries, list) or any(
+        not isinstance(entry, Mapping) or set(entry) != {"source_index", "example_id"}
+        for entry in entries
+    ):
+        raise TypeError("committed development source entries are malformed")
+    if any(
+        not isinstance(entry["example_id"], str)
+        or not entry["example_id"]
+        or isinstance(entry["source_index"], bool)
+        or not isinstance(entry["source_index"], int)
+        or not 0 <= entry["source_index"] < EXPECTED_OFFICIAL_TEST_COUNT
+        for entry in entries
+    ):
+        raise TypeError("committed development source entry values are malformed")
+    dev_ids = tuple(entry["example_id"] for entry in entries)
+    dev_indices = tuple(sorted(entry["source_index"] for entry in entries))
+    if (
+        dev.get("schema") != "rl-no-backward-gsm8k-dev-source-index-v1"
+        or dev.get("dataset_id") != GSM8K_DATASET_ID
+        or dev.get("dataset_config") != GSM8K_DATASET_CONFIG
+        or dev.get("dataset_revision") != config["dataset_revision"]
+        or dev.get("evaluation_manifest_sha256") != manifest.manifest_sha256
+        or dev.get("official_test_count") != EXPECTED_OFFICIAL_TEST_COUNT
+        or dev.get("dev_count") != EXPECTED_DEV_COUNT
+        or dev_ids != manifest.dev_example_ids
+        or dev_indices != receipt.dev_source_indices
+    ):
+        raise ValueError("development source receipt differs from manifest/sealed indices")
+    access_sources = source_audit["access_sources"]
+    dev_access = access_sources["development_source_receipt"]
+    manifest_access = access_sources["manifest"]
+    if (
+        dev_access["file_sha256"] != _file_digest(dev_path)
+        or dev_access["receipt_sha256"] != dev_receipt_sha
+        or manifest_access["file_sha256"] != _file_digest(manifest_target)
+        or metadata.get("dev_source_index_receipt_sha256") != dev_receipt_sha
+        or metadata.get("dev_source_index_receipt_path") != config.get("dev_source_index_receipt")
+        or metadata.get("evaluation_manifest_path") != config.get("evaluation_manifest")
+    ):
+        raise ValueError(
+            "training metadata and sealing audit do not bind the same dev/manifest files"
+        )
+    quarantine = _load_json_mapping(quarantine_path)
+    quarantine_access = access_sources["touched_test_quarantine"]
+    if (
+        quarantine.get("schema_version") != 1
+        or quarantine.get("test_example_ids") != list(manifest.excluded_test_example_ids)
+        or quarantine_access["file_sha256"] != _file_digest(quarantine_path)
+        or quarantine_access["excluded_test_ids_sha256"] != manifest.excluded_test_ids_sha256
+        or quarantine_access["evaluation_manifest_sha256"] != manifest.manifest_sha256
+        or quarantine_access["row_count"] != EXPECTED_EXCLUDED_TEST_COUNT
+    ):
+        raise ValueError("committed touched-test quarantine differs from the manifest")
+    return {
+        "development_source_receipt_relpath": str(dev_path.relative_to(worktree)),
+        "development_source_receipt_file_sha256": _file_digest(dev_path),
+        "development_source_receipt_sha256": dev_receipt_sha,
+        "development_source_indices_sha256": receipt.dev_source_indices_sha256,
+        "development_ids_sha256": manifest.dev_ids_sha256,
+        "quarantine_relpath": str(quarantine_path.relative_to(worktree)),
+        "quarantine_file_sha256": _file_digest(quarantine_path),
+        "excluded_test_ids_sha256": manifest.excluded_test_ids_sha256,
+        "development_row_loading": "Dataset.select(committed_dev_source_indices)",
+    }
+
+
+def _validate_prior_question_evidence(
+    source_audit: Mapping[str, Any],
+    worktree: Path,
+) -> tuple[dict[str, Any], ...]:
+    sources = source_audit["access_sources"]["prior_exposure_question_samples"]
+    receipts: list[dict[str, Any]] = []
+    for source in sources:
+        metadata_sha = source["metadata_file_sha256"]
+        expected_relpath = FINAL_PRIOR_QUESTION_SOURCES.get(metadata_sha)
+        expected_metadata_relpath = FINAL_PRIOR_METADATA_SOURCES.get(metadata_sha)
+        if (
+            expected_relpath is None
+            or expected_metadata_relpath is None
+            or source.get("committed_question_source") != expected_relpath
+            or source.get("committed_metadata_source") != expected_metadata_relpath
+        ):
+            raise ValueError("sealing audit lacks the canonical committed prior-question evidence")
+        metadata_path = _resolve_config_input_path(
+            expected_metadata_relpath, worktree, name="committed prior metadata"
+        )
+        if _file_digest(metadata_path) != metadata_sha:
+            raise ValueError("committed prior metadata differs from the sealing audit")
+        evidence_path = _resolve_config_input_path(
+            expected_relpath, worktree, name="committed prior-question evidence"
+        )
+        if _file_digest(evidence_path) != source["question_sample_file_sha256"]:
+            raise ValueError("committed prior-question evidence differs from the sealing audit")
+        inspected = inspect_prior_question_evidence(evidence_path)
+        prior_metadata_ids = _load_json_mapping(metadata_path).get("test_example_ids")
+        if (
+            inspected["row_count"] != source["row_count"]
+            or not isinstance(prior_metadata_ids, list)
+            or tuple(prior_metadata_ids) != inspected["example_ids"]
+            or inspected["question_projection_sha256"] != source["question_projection_sha256"]
+        ):
+            raise ValueError("prior-question evidence projection differs from the sealing audit")
+        receipts.append(
+            {
+                "metadata_file_sha256": metadata_sha,
+                "metadata_relpath": expected_metadata_relpath,
+                "evidence_relpath": expected_relpath,
+                "evidence_file_sha256": source["question_sample_file_sha256"],
+                "question_projection_sha256": source["question_projection_sha256"],
+                "row_count": source["row_count"],
+                "access_scope": "example_id and question only; all other values lexically skipped",
+            }
+        )
+    if tuple(receipt["metadata_file_sha256"] for receipt in receipts) != tuple(
+        sorted(FINAL_PRIOR_QUESTION_SOURCES)
+    ):
+        # The manifest receipts are sorted by metadata digest, and the seal
+        # must use the same stable order.
+        receipts.sort(key=lambda receipt: receipt["metadata_file_sha256"])
+    if {receipt["metadata_file_sha256"] for receipt in receipts} != set(
+        FINAL_PRIOR_QUESTION_SOURCES
+    ):
+        raise ValueError("prior-question evidence does not cover both quarantine sources")
+    return tuple(receipts)
+
+
 def _selected_policy_pairs(
     methods: Sequence[str],
     seeds: Sequence[int],
 ) -> tuple[tuple[str, int], ...]:
     """Mirror training: one shared base plus BP/FO for every experimental seed."""
 
-    if tuple(methods) != EXPECTED_METHODS or not seeds:
-        raise ValueError("selected policy pairs require the matched methods and at least one seed")
-    return tuple(
-        (method, seed)
-        for seed_index, seed in enumerate(seeds)
-        for method in (methods if seed_index == 0 else tuple(m for m in methods if m != "base"))
-    )
+    if tuple(methods) != EXPECTED_METHODS or tuple(seeds) != EXPECTED_SEEDS:
+        raise ValueError("selected policy pairs require the exact final methods/seeds")
+    return EXPECTED_POLICY_PAIRS
 
 
 def build_locked_evaluation_plan(
@@ -555,22 +698,37 @@ def build_locked_evaluation_plan(
     manifest_path: str | Path,
     source_index_receipt_path: str | Path,
     *,
-    expected_locked_count: int = EXPECTED_LOCKED_TEST_COUNT,
     enforce_committed_inputs: bool = True,
 ) -> dict[str, Any]:
     """Preflight a frozen evaluation without importing datasets or reading answers."""
 
-    benchmark = Path(benchmark_output).resolve()
-    manifest_target = Path(manifest_path).resolve()
-    source_target = Path(source_index_receipt_path).resolve()
+    benchmark = _reject_symlinked_input(benchmark_output, name="benchmark output").resolve()
+    manifest_target = _reject_symlinked_input(manifest_path, name="evaluation manifest").resolve()
+    source_target = _reject_symlinked_input(
+        source_index_receipt_path, name="source-index receipt"
+    ).resolve()
+    source_audit_target = _reject_symlinked_input(
+        source_target.with_suffix(".audit.json"), name="source-index sealing audit"
+    ).resolve()
     manifest = load_evaluation_split_manifest(manifest_target)
-    if manifest.locked_test_count != expected_locked_count:
-        raise ValueError(
-            f"locked manifest contains {manifest.locked_test_count} rows; "
-            f"expected {expected_locked_count}"
-        )
+    manifest_counts = (
+        manifest.official_test_count,
+        manifest.excluded_test_count,
+        manifest.dev_count,
+        manifest.locked_test_count,
+    )
+    expected_counts = (
+        EXPECTED_OFFICIAL_TEST_COUNT,
+        EXPECTED_EXCLUDED_TEST_COUNT,
+        EXPECTED_DEV_COUNT,
+        EXPECTED_LOCKED_TEST_COUNT,
+    )
+    if manifest_counts != expected_counts:
+        raise ValueError("locked evaluation requires exact 1319/384/256/679 manifest counts")
     metadata_path = benchmark / "metadata.json"
     validation_path = benchmark / "artifact_validation.json"
+    _require_regular_file_within(metadata_path, benchmark, name="benchmark metadata")
+    _require_regular_file_within(validation_path, benchmark, name="artifact validation")
     metadata = _load_json_mapping(metadata_path)
     config, methods, seeds = _validate_training_metadata(metadata, manifest)
     receipt = load_locked_source_index_receipt(
@@ -578,12 +736,16 @@ def build_locked_evaluation_plan(
         manifest,
         dataset_revision=str(config["dataset_revision"]),
     )
+    source_audit = _load_json_mapping(source_audit_target)
+    validate_locked_source_audit(receipt, source_audit, manifest)
     validation = _load_json_mapping(validation_path)
     policy_pairs = _selected_policy_pairs(methods, seeds)
     expected_runs = len(policy_pairs)
     if (
         validation.get("passed") is not True
         or validation.get("status") != "complete"
+        or not isinstance(validation.get("output_dir"), str)
+        or Path(validation["output_dir"]).resolve() != benchmark
         or validation.get("expected_runs") != expected_runs
         or validation.get("validated_runs") != expected_runs
         or validation.get("errors") != []
@@ -603,9 +765,27 @@ def build_locked_evaluation_plan(
     ):
         raise RuntimeError("locked evaluation planning requires a clean Git worktree")
     worktree = Path(worktree_value).resolve()
+    split_input_receipt = _validate_bound_split_inputs(
+        config,
+        metadata,
+        manifest,
+        receipt,
+        source_audit,
+        manifest_target,
+        worktree,
+    )
+    prior_question_evidence = _validate_prior_question_evidence(source_audit, worktree)
     if enforce_committed_inputs:
         _require_committed_file(manifest_target, worktree)
         _require_committed_file(source_target, worktree)
+        _require_committed_file(source_audit_target, worktree)
+        _require_committed_file(
+            worktree / split_input_receipt["development_source_receipt_relpath"], worktree
+        )
+        _require_committed_file(worktree / split_input_receipt["quarantine_relpath"], worktree)
+        for evidence in prior_question_evidence:
+            _require_committed_file(worktree / evidence["metadata_relpath"], worktree)
+            _require_committed_file(worktree / evidence["evidence_relpath"], worktree)
 
     checkpoints = [
         _selection_and_checkpoint_receipt(
@@ -645,7 +825,15 @@ def build_locked_evaluation_plan(
         "manifest_file_sha256": _file_digest(manifest_target),
         "source_index_receipt_sha256": receipt.receipt_sha256,
         "source_index_file_sha256": _file_digest(source_target),
-        "row_loading": "Dataset.select(committed_locked_source_indices)",
+        "source_sealing_audit_file_sha256": _file_digest(source_audit_target),
+        "official_question_ids_sha256": receipt.official_question_ids_sha256,
+        "locked_source_indices_sha256": receipt.locked_source_indices_sha256,
+        "source_sealing_audit_sha256": receipt.sealing_audit_sha256,
+        "training_evaluation_inputs": split_input_receipt,
+        "prior_question_evidence": list(prior_question_evidence),
+        "row_loading": (
+            "Dataset.select(committed_locked_source_indices), then authorized opaque-ID reorder"
+        ),
         "selection_split": "development",
         "selection_metric": "exact_match",
         "generation": {
@@ -702,18 +890,19 @@ def load_locked_examples(
     for entry, row in zip(receipt.entries, selected_rows, strict=True):
         if not isinstance(row, Mapping) or not {"question", "answer"} <= set(row):
             raise TypeError("selected locked GSM8K row is malformed")
+        if gsm8k_question_id(row["question"]) != entry.question_id:
+            raise ValueError("selected locked row does not match its sealed question ID")
         example = GSM8KExample(
             question=row["question"],
             answer=row["answer"],
             split="test",
             source_index=entry.source_index,
         )
-        if example.example_id != entry.example_id:
-            raise ValueError("selected locked row does not match its committed example ID")
         examples.append(example)
-    if tuple(example.example_id for example in examples) != manifest.locked_test_example_ids:
-        raise RuntimeError("materialized locked examples differ from committed manifest order")
-    return tuple(examples)
+    by_id = {example.example_id: example for example in examples}
+    if len(by_id) != len(examples) or set(by_id) != set(manifest.locked_test_example_ids):
+        raise RuntimeError("authorized locked rows do not exactly match the manifest ID set")
+    return tuple(by_id[example_id] for example_id in manifest.locked_test_example_ids)
 
 
 def _format_prompts(tokenizer: Any, examples: Sequence[GSM8KExample]) -> tuple[str, ...]:
@@ -1189,7 +1378,6 @@ __all__ = [
     "LockedSourceIndexEntry",
     "LockedSourceIndexReceipt",
     "build_locked_evaluation_plan",
-    "build_locked_source_index_receipt",
     "evaluate_locked_policy",
     "load_locked_examples",
     "load_locked_source_index_receipt",

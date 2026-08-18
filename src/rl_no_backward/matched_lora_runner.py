@@ -41,6 +41,7 @@ from .gsm8k import (
     load_gsm8k_split,
     select_seeded_subset,
 )
+from .matched_focus import FocusCovarianceConfig
 from .matched_grpo_objective import (
     MatchedGRPOObjectiveConfig,
     detached_inference_correction,
@@ -66,7 +67,10 @@ from .standard_lora import (
 )
 from .vllm_lora_rollout import ReloadableLoRAGenerator, create_standard_lora_vllm_engine
 
-MATCHED_METHODS = ("base", "bp_grpo", "fo_npg")
+PRIMARY_MATCHED_METHODS = ("base", "bp_grpo", "fo_npg")
+OPTIONAL_MATCHED_METHODS = ("fo_focus_npg",)
+MATCHED_METHODS = (*PRIMARY_MATCHED_METHODS, *OPTIONAL_MATCHED_METHODS)
+FORWARD_ONLY_METHODS = frozenset(("fo_npg", "fo_focus_npg"))
 
 
 @dataclass(slots=True)
@@ -80,9 +84,7 @@ class MatchedLoRAExperimentConfig:
     train_size: int = 8
     dev_size: int = 256
     evaluation_manifest: str = "configs/gsm8k_standard_lora_eval_manifest.json"
-    dev_source_index_receipt: str = (
-        "configs/gsm8k_standard_lora_dev_source_indices.json"
-    )
+    dev_source_index_receipt: str = "configs/gsm8k_standard_lora_dev_source_indices.json"
     touched_test_exclusions: str = "configs/gsm8k_touched_test_exclusions.json"
     subset_seed: int = 314159
     methods: list[str] = field(default_factory=lambda: ["base", "bp_grpo", "fo_npg"])
@@ -127,6 +129,7 @@ class MatchedLoRAExperimentConfig:
     objective: MatchedGRPOObjectiveConfig = field(default_factory=MatchedGRPOObjectiveConfig)
     backprop: MatchedBackpropConfig = field(default_factory=MatchedBackpropConfig)
     forward: MatchedForwardConfig = field(default_factory=MatchedForwardConfig)
+    focus: FocusCovarianceConfig = field(default_factory=FocusCovarianceConfig)
 
     def __post_init__(self) -> None:
         self.validate()
@@ -141,14 +144,19 @@ class MatchedLoRAExperimentConfig:
         payload["objective"] = MatchedGRPOObjectiveConfig(**dict(payload.get("objective") or {}))
         payload["backprop"] = MatchedBackpropConfig(**dict(payload.get("backprop") or {}))
         payload["forward"] = MatchedForwardConfig(**dict(payload.get("forward") or {}))
+        payload["focus"] = FocusCovarianceConfig(**dict(payload.get("focus") or {}))
         return cls(**payload)
 
     def validate(self) -> None:
         unknown = sorted(set(self.methods) - set(MATCHED_METHODS))
         if unknown or len(set(self.methods)) != len(self.methods):
             raise ValueError(f"methods must be unique members of {MATCHED_METHODS}: {unknown}")
-        if set(self.methods) != set(MATCHED_METHODS):
-            raise ValueError("the headline gate requires methods [base, bp_grpo, fo_npg]")
+        missing_primary = sorted(set(PRIMARY_MATCHED_METHODS) - set(self.methods))
+        if missing_primary:
+            raise ValueError(
+                "the headline gate requires [base, bp_grpo, fo_npg]; "
+                f"only {list(OPTIONAL_MATCHED_METHODS)} may be added: missing={missing_primary}"
+            )
         for name in (
             "train_size",
             "dev_size",
@@ -169,9 +177,15 @@ class MatchedLoRAExperimentConfig:
             raise ValueError("schedule_mode must be fixed_overfit or shuffled_cycles")
         if self.schedule_mode == "fixed_overfit" and self.train_size != self.batch_size:
             raise ValueError("fixed_overfit requires train_size == batch_size")
+        if "fo_focus_npg" in self.methods and (
+            self.forward.directions != 8 or self.batch_size < 2 or self.batch_size % 2
+        ):
+            raise ValueError("fo_focus_npg requires q=8 and an even prompt batch of at least two")
         if self.group_size < 2:
             raise ValueError("group_size must be at least two")
-        if not self.seeds or any(isinstance(seed, bool) or not isinstance(seed, int) for seed in self.seeds):
+        if not self.seeds or any(
+            isinstance(seed, bool) or not isinstance(seed, int) for seed in self.seeds
+        ):
             raise ValueError("seeds must contain integers")
         if self.run_test_evaluation or self.test_size != 0:
             raise ValueError("the learning gate must not access locked-test evaluation")
@@ -198,7 +212,8 @@ class MatchedLoRAExperimentConfig:
         if "{seed}" not in self.shared_initialization_path_template:
             raise ValueError("shared initialization path must contain {seed}")
         if not (
-            0 <= self.vllm_logprob_mean_abs_tolerance
+            0
+            <= self.vllm_logprob_mean_abs_tolerance
             <= self.vllm_logprob_p99_abs_tolerance
             <= self.vllm_logprob_max_abs_tolerance
         ):
@@ -342,7 +357,9 @@ def _load_data(
         or receipt["official_test_count"] != manifest.official_test_count
         or receipt["dev_count"] != manifest.dev_count
     ):
-        raise ValueError("development source-index receipt does not bind the locked dataset/manifest")
+        raise ValueError(
+            "development source-index receipt does not bind the locked dataset/manifest"
+        )
     entries = receipt["entries"]
     if not isinstance(entries, list) or any(
         not isinstance(entry, Mapping) or set(entry) != {"source_index", "example_id"}
@@ -498,12 +515,9 @@ def _parity_metrics(
         "vllm_hf_logprob_max_abs_difference": float(differences.max().item()),
     }
     if (
-        metrics["vllm_hf_logprob_mean_abs_difference"]
-        > config.vllm_logprob_mean_abs_tolerance
-        or metrics["vllm_hf_logprob_p99_abs_difference"]
-        > config.vllm_logprob_p99_abs_tolerance
-        or metrics["vllm_hf_logprob_max_abs_difference"]
-        > config.vllm_logprob_max_abs_tolerance
+        metrics["vllm_hf_logprob_mean_abs_difference"] > config.vllm_logprob_mean_abs_tolerance
+        or metrics["vllm_hf_logprob_p99_abs_difference"] > config.vllm_logprob_p99_abs_tolerance
+        or metrics["vllm_hf_logprob_max_abs_difference"] > config.vllm_logprob_max_abs_tolerance
     ):
         raise RuntimeError(f"vLLM/HF fixed-completion parity gate failed: {metrics}")
     return metrics
@@ -661,9 +675,7 @@ def build_matched_rollout(
         rollout_truncation_fraction=truncation_fraction,
         rollout_eos_terminated_fraction=eos_fraction,
         old_score_forward_calls=old_score_accounting["forward_calls"],
-        old_score_teacher_forced_examples=old_score_accounting[
-            "teacher_forced_examples"
-        ],
+        old_score_teacher_forced_examples=old_score_accounting["teacher_forced_examples"],
         old_score_scored_tokens=old_score_accounting["scored_tokens"],
     )
 
@@ -816,10 +828,7 @@ def _run_vllm_same_id_reload_gate(
     changed_probe = sync_and_probe("changed")
     changed_output = (
         changed_probe["token_id"] != initial_probe["token_id"]
-        or abs(
-            changed_probe["selected_token_logprob"]
-            - initial_probe["selected_token_logprob"]
-        )
+        or abs(changed_probe["selected_token_logprob"] - initial_probe["selected_token_logprob"])
         > 1.0e-6
     )
     if not changed_output:
@@ -884,6 +893,67 @@ def _peak_memory() -> dict[str, int]:
         "peak_gpu_memory_allocated_bytes": int(torch.cuda.max_memory_allocated()),
         "peak_gpu_memory_reserved_bytes": int(torch.cuda.max_memory_reserved()),
     }
+
+
+def _matched_objective_telemetry(result: Any) -> dict[str, float | None]:
+    """Return fixed-rollout objective telemetry shared by JSONL and W&B.
+
+    ``grpo_loss`` is deliberately just ``-grpo_objective``.  It is not a
+    cross-rollout likelihood loss: fresh group-standardized advantages can
+    make the absolute value zero-centered, so before/after deltas are the
+    meaningful within-step comparison.
+    """
+
+    telemetry = {
+        "surrogate_improvement": float(result.surrogate_improvement),
+        "grpo_objective_before": float(result.grpo_objective_before),
+        "grpo_objective_after": float(result.grpo_objective_after),
+        "grpo_loss_before": float(result.grpo_loss_before),
+        "grpo_loss_after": float(result.grpo_loss_after),
+        "line_search_candidate_grpo_objective": getattr(
+            result,
+            "line_search_candidate_grpo_objective",
+            None,
+        ),
+        "line_search_candidate_grpo_loss": getattr(
+            result,
+            "line_search_candidate_grpo_loss",
+            None,
+        ),
+        "line_search_candidate_surrogate_improvement": getattr(
+            result,
+            "line_search_candidate_surrogate_improvement",
+            None,
+        ),
+        "line_search_candidate_empirical_kl": getattr(
+            result,
+            "line_search_candidate_empirical_kl",
+            None,
+        ),
+    }
+    required = tuple(value for value in telemetry.values() if value is not None)
+    if not all(math.isfinite(value) for value in required):
+        raise RuntimeError("matched GRPO objective telemetry is non-finite")
+    if not math.isclose(
+        telemetry["grpo_loss_before"],
+        -telemetry["grpo_objective_before"],
+        rel_tol=1.0e-9,
+        abs_tol=1.0e-9,
+    ) or not math.isclose(
+        telemetry["grpo_loss_after"],
+        -telemetry["grpo_objective_after"],
+        rel_tol=1.0e-9,
+        abs_tol=1.0e-9,
+    ):
+        raise RuntimeError("matched GRPO loss is not the negative fixed-rollout objective")
+    if not math.isclose(
+        telemetry["surrogate_improvement"],
+        telemetry["grpo_objective_after"] - telemetry["grpo_objective_before"],
+        rel_tol=1.0e-9,
+        abs_tol=1.0e-9,
+    ):
+        raise RuntimeError("matched GRPO objective delta is inconsistent")
+    return telemetry
 
 
 def _synchronize_cuda() -> None:
@@ -1021,23 +1091,12 @@ def _learning_gate_status(
     efficacy checks may be observed without rejecting a completed headline run.
     """
 
-    structural = {
-        name: value for name, value in structural_checks.items() if value is not None
-    }
-    stochastic = {
-        name: value for name, value in stochastic_checks.items() if value is not None
-    }
-    if any(
-        not isinstance(value, bool)
-        for value in (*structural.values(), *stochastic.values())
-    ):
+    structural = {name: value for name, value in structural_checks.items() if value is not None}
+    stochastic = {name: value for name, value in stochastic_checks.items() if value is not None}
+    if any(not isinstance(value, bool) for value in (*structural.values(), *stochastic.values())):
         raise TypeError("learning checks must be booleans or None")
-    failed_structural = sorted(
-        name for name, value in structural.items() if value is not True
-    )
-    failed_stochastic = sorted(
-        name for name, value in stochastic.items() if value is not True
-    )
+    failed_structural = sorted(name for name, value in structural.items() if value is not True)
+    failed_stochastic = sorted(name for name, value in stochastic.items() if value is not True)
     structural_passed = not failed_structural
     stochastic_observed_passed = not failed_stochastic
     return {
@@ -1073,7 +1132,7 @@ def _run_trial(
     load_lora_state_dict(bundle.model, initial_state)
     if lora_state_digest(bundle.model) != initialization_digest:
         raise RuntimeError("trial did not start from the shared LoRA initialization")
-    if method in {"base", "fo_npg"}:
+    if method == "base" or method in FORWARD_ONLY_METHODS:
         set_adapter_grad_enabled(bundle, False)
         for parameter in bundle.trainable_parameters:
             parameter.grad = None
@@ -1200,6 +1259,16 @@ def _run_trial(
     else:
         set_adapter_grad_enabled(bundle, False)
     direction_generator = torch.Generator(device=bundle.device).manual_seed(seed + 70_000)
+    focus_state = None
+    if method == "fo_focus_npg":
+        from .matched_focus import MatchedFocusState, canonical_lora_partition
+
+        focus_state = MatchedFocusState(
+            canonical_lora_partition(bundle.model),
+            config.focus,
+            device=bundle.device,
+            dtype=torch.float32,
+        )
     informative_group_observed = False
     nonzero_policy_step_observed = False
     finite_nonzero_bp_gradient_observed = False
@@ -1257,7 +1326,7 @@ def _run_trial(
             fisher_condition = None
             derivative_variance = None
             line_search_trials = 0
-        else:
+        elif method == "fo_npg":
             result = matched_forward_npg_step(
                 bundle,
                 matched_rollout.rollout,
@@ -1269,6 +1338,25 @@ def _run_trial(
             fisher_condition = result.fisher_condition
             derivative_variance = result.derivative_variance
             line_search_trials = result.line_search_trials
+        elif method == "fo_focus_npg":
+            if focus_state is None:
+                raise RuntimeError("FOCUS method started without covariance state")
+            from .matched_lora_focus_forward_only import matched_focus_npg_step
+
+            result = matched_focus_npg_step(
+                bundle,
+                matched_rollout.rollout,
+                matched_rollout.sampler_token_log_probs,
+                direction_generator,
+                config.objective,
+                config.forward,
+                focus_state,
+            )
+            fisher_condition = result.fisher_condition
+            derivative_variance = result.derivative_variance
+            line_search_trials = result.line_search_trials
+        else:  # pragma: no cover - guarded by the locked config and CLI choices
+            raise ValueError(f"unknown matched training method {method!r}")
         _synchronize_cuda()
         optimizer_seconds = time.perf_counter() - optimizer_started
         after_digest = lora_state_digest(bundle.model)
@@ -1285,16 +1373,11 @@ def _run_trial(
             )
         response_tokens = matched_rollout.rollout.valid_response_tokens
         counters["generated_tokens"] += response_tokens
-        counters["scored_tokens"] += (
-            matched_rollout.old_score_scored_tokens + result.scored_tokens
-        )
-        counters["forward_calls"] += (
-            matched_rollout.old_score_forward_calls + result.forward_calls
-        )
+        counters["scored_tokens"] += matched_rollout.old_score_scored_tokens + result.scored_tokens
+        counters["forward_calls"] += matched_rollout.old_score_forward_calls + result.forward_calls
         counters["backward_calls"] += result.backward_calls
         counters["teacher_forced_examples"] += (
-            matched_rollout.old_score_teacher_forced_examples
-            + result.teacher_forced_examples
+            matched_rollout.old_score_teacher_forced_examples + result.teacher_forced_examples
         )
         correction = detached_inference_correction(
             matched_rollout.rollout.old_token_log_probs,
@@ -1318,6 +1401,7 @@ def _run_trial(
             raise RuntimeError(
                 "vLLM/HF inference correction annihilated too many sampled completions"
             )
+        objective_telemetry = _matched_objective_telemetry(result)
         train_record = {
             "kind": "train_step",
             "method": method,
@@ -1327,9 +1411,7 @@ def _run_trial(
             "rollout_and_old_score_seconds": rollout_seconds,
             "optimizer_seconds": optimizer_seconds,
             "policy_sync_seconds": policy_sync_seconds,
-            "training_phase_seconds": (
-                policy_sync_seconds + rollout_seconds + optimizer_seconds
-            ),
+            "training_phase_seconds": (policy_sync_seconds + rollout_seconds + optimizer_seconds),
             "environment_samples": step * config.responses_per_step,
             "generated_tokens": counters["generated_tokens"],
             "scored_tokens": counters["scored_tokens"],
@@ -1353,13 +1435,26 @@ def _run_trial(
             "zero_advantage_fraction": result.zero_advantage_fraction,
             "accepted": result.accepted,
             "empirical_kl": result.empirical_kl,
-            "surrogate_improvement": result.surrogate_improvement,
+            **objective_telemetry,
             "step_norm": result.step_norm,
             "projected_gradient_norm": result.projected_gradient_norm,
             "fisher_condition": fisher_condition,
             "derivative_variance": derivative_variance,
             "line_search_trials": line_search_trials,
             "policy_evaluations": result.policy_evaluations,
+            "focus_bootstrap_b_only": getattr(result, "focus_bootstrap_b_only", None),
+            "focus_a_rank": getattr(result, "focus_a_rank", None),
+            "focus_b_rank": getattr(result, "focus_b_rank", None),
+            "focus_a_update_count": getattr(result, "focus_a_update_count", None),
+            "focus_b_update_count": getattr(result, "focus_b_update_count", None),
+            "focus_state_numel": getattr(result, "focus_state_numel", None),
+            "focus_state_numel_cap": getattr(result, "focus_state_numel_cap", None),
+            "focus_first_half_prompts": getattr(result, "focus_first_half_prompts", None),
+            "focus_second_half_prompts": getattr(result, "focus_second_half_prompts", None),
+            "focus_cross_sketch_count": getattr(result, "focus_cross_sketch_count", None),
+            "focus_state_update_policy_evaluations": (
+                getattr(result, "focus_state_update_policy_evaluations", None)
+            ),
             "learning_rate": (
                 float(optimizer.param_groups[0]["lr"]) if optimizer is not None else None
             ),
@@ -1374,9 +1469,7 @@ def _run_trial(
             "old_policy_rescore_scored_tokens": matched_rollout.old_score_scored_tokens,
             "rollout_finish_reason_counts": matched_rollout.finish_reason_counts,
             "rollout_truncation_fraction": matched_rollout.rollout_truncation_fraction,
-            "rollout_eos_terminated_fraction": (
-                matched_rollout.rollout_eos_terminated_fraction
-            ),
+            "rollout_eos_terminated_fraction": (matched_rollout.rollout_eos_terminated_fraction),
             "inference_ratio_mean": float(valid_correction.mean().item()),
             "inference_ratio_min": float(valid_correction.min().item()),
             "inference_ratio_max": float(valid_correction.max().item()),
@@ -1393,22 +1486,47 @@ def _run_trial(
         }
         _append_jsonl(raw_path, train_record)
         if run is not None:
-            run.log(
-                {
-                    "training_step": step,
-                    "train/exact_reward": result.reward_mean,
-                    "train/optimizer_seconds": optimizer_seconds,
-                    "train/rollout_seconds": rollout_seconds,
-                    "train/policy_sync_seconds": policy_sync_seconds,
-                    "train/training_phase_seconds": (
-                        policy_sync_seconds + rollout_seconds + optimizer_seconds
-                    ),
-                    "train/step_norm": result.step_norm,
-                    "train/vllm_hf_logprob_mean_abs_difference": matched_rollout.parity[
-                        "vllm_hf_logprob_mean_abs_difference"
-                    ],
-                }
-            )
+            wandb_record = {
+                "training_step": step,
+                "train/exact_reward": result.reward_mean,
+                "train/optimizer_seconds": optimizer_seconds,
+                "train/rollout_seconds": rollout_seconds,
+                "train/policy_sync_seconds": policy_sync_seconds,
+                "train/training_phase_seconds": (
+                    policy_sync_seconds + rollout_seconds + optimizer_seconds
+                ),
+                "train/accepted": result.accepted,
+                "train/empirical_kl": result.empirical_kl,
+                "train/step_norm": result.step_norm,
+                "train/projected_gradient_norm": result.projected_gradient_norm,
+                "train/policy_evaluations": result.policy_evaluations,
+                "train/cumulative_forward_calls": counters["forward_calls"],
+                "train/cumulative_backward_calls": counters["backward_calls"],
+                "train/vllm_hf_logprob_mean_abs_difference": matched_rollout.parity[
+                    "vllm_hf_logprob_mean_abs_difference"
+                ],
+                **{
+                    f"train/{key}": value
+                    for key, value in objective_telemetry.items()
+                    if value is not None
+                },
+            }
+            if method == "fo_focus_npg":
+                wandb_record.update(
+                    {
+                        "focus/bootstrap_b_only": result.focus_bootstrap_b_only,
+                        "focus/a_rank": result.focus_a_rank,
+                        "focus/b_rank": result.focus_b_rank,
+                        "focus/a_update_count": result.focus_a_update_count,
+                        "focus/b_update_count": result.focus_b_update_count,
+                        "focus/state_numel": result.focus_state_numel,
+                        "focus/cross_sketch_count": result.focus_cross_sketch_count,
+                        "focus/state_update_policy_evaluations": (
+                            result.focus_state_update_policy_evaluations
+                        ),
+                    }
+                )
+            run.log(wandb_record)
 
         if step % config.eval_interval == 0 or step == config.steps:
             validation_sync_seconds = sync("validation", step)
@@ -1463,14 +1581,12 @@ def _run_trial(
 
     if counters["backward_calls"] == 0 and method == "bp_grpo":
         raise RuntimeError("BP trial completed without reverse-mode calls")
-    if counters["backward_calls"] != 0 and method == "fo_npg":
+    if counters["backward_calls"] != 0 and method in FORWARD_ONLY_METHODS:
         raise RuntimeError("forward-only trial recorded reverse-mode calls")
     if config.steps * config.responses_per_step != config.response_budget:
         raise RuntimeError("response-budget arithmetic changed during the trial")
     live_final_digest = lora_state_digest(bundle.model)
-    train_accuracy_gain = (
-        final_train_metrics["accuracy"] - initial_train_metrics["accuracy"]
-    )
+    train_accuracy_gain = final_train_metrics["accuracy"] - initial_train_metrics["accuracy"]
     dev_accuracy_gain = final_dev_metrics["accuracy"] - metrics["accuracy"]
     best_dev_accuracy_gain = best_accuracy - metrics["accuracy"]
     structural_checks = {
@@ -1480,15 +1596,14 @@ def _run_trial(
             finite_nonzero_bp_gradient_observed if method == "bp_grpo" else None
         ),
         "accepted_nonzero_fo_step_observed": (
-            accepted_nonzero_fo_step_observed if method == "fo_npg" else None
+            accepted_nonzero_fo_step_observed if method in FORWARD_ONLY_METHODS else None
         ),
     }
     stochastic_checks = {
         "informative_group_observed": informative_group_observed,
         "bp_train_gain_met": (
             train_accuracy_gain >= config.minimum_bp_train_accuracy_gain
-            if method == "bp_grpo"
-            and config.minimum_bp_train_accuracy_gain is not None
+            if method == "bp_grpo" and config.minimum_bp_train_accuracy_gain is not None
             else None
         ),
         "bp_best_dev_gain_met": (
@@ -1716,7 +1831,7 @@ def _run_isolated_trial_child(
     if child_source_status is None or child_source_status:
         raise RuntimeError("child must start from the same clean Git worktree as its parent")
     backprop_module_name = "rl_no_backward.matched_lora_backprop"
-    if method == "fo_npg" and backprop_module_name in sys.modules:
+    if method in FORWARD_ONLY_METHODS and backprop_module_name in sys.modules:
         raise RuntimeError("forward-only child imported the reverse-mode implementation")
     train_examples, dev_examples, _ = _load_data(config)
     train_by_id = {example.example_id: example for example in train_examples}
@@ -1738,7 +1853,7 @@ def _run_isolated_trial_child(
     if loaded_digest != initialization_digest:
         raise RuntimeError("child initialization digest differs from parent artifact")
     initial_state = lora_state_dict(bundle.model)
-    if method in {"base", "fo_npg"}:
+    if method == "base" or method in FORWARD_ONLY_METHODS:
         set_adapter_grad_enabled(bundle, False)
         for parameter in bundle.trainable_parameters:
             parameter.grad = None
@@ -1789,7 +1904,7 @@ def _run_isolated_trial_child(
         first_rollout_reference={},
         reload_receipts=receipts,
     )
-    if method == "fo_npg" and backprop_module_name in sys.modules:
+    if method in FORWARD_ONLY_METHODS and backprop_module_name in sys.modules:
         raise RuntimeError("forward-only execution imported the reverse-mode implementation")
     base_after = frozen_base_parameter_digest(bundle.model)
     if base_after != base_before:
@@ -1812,8 +1927,8 @@ def _run_isolated_trial_child(
             "scope": "combined HF scorer/trainer plus colocated vLLM engine in child process",
             "vllm_worker_excluded": False,
         },
-        "fo_reverse_mode_modules_called": False if method == "fo_npg" else None,
-        "fo_backprop_module_imported": False if method == "fo_npg" else None,
+        "fo_reverse_mode_modules_called": False if method in FORWARD_ONLY_METHODS else None,
+        "fo_backprop_module_imported": False if method in FORWARD_ONLY_METHODS else None,
     }
     destination = output / "trial_metadata" / f"{method}_seed{seed}.json"
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -1855,7 +1970,11 @@ def _validate_isolated_trial_outputs(
     first_rollouts: dict[int, dict[str, tuple[str, str]]] = {}
     child_process_ids: set[int] = set()
     for seed in config.seeds:
-        methods = config.methods if seed == config.seeds[0] else [m for m in config.methods if m != "base"]
+        methods = (
+            config.methods
+            if seed == config.seeds[0]
+            else [m for m in config.methods if m != "base"]
+        )
         for method in methods:
             label = f"{method}_seed{seed}"
             metadata = _load_json_mapping(output / "trial_metadata" / f"{label}.json")
@@ -1869,17 +1988,22 @@ def _validate_isolated_trial_outputs(
             if process_id == os.getpid() or process_id in child_process_ids:
                 raise RuntimeError("method/seed trials did not use distinct fresh child processes")
             child_process_ids.add(process_id)
-            if (
-                metadata.get("frozen_base_parameter_digest_before")
-                != metadata.get("frozen_base_parameter_digest_after")
+            if metadata.get("frozen_base_parameter_digest_before") != metadata.get(
+                "frozen_base_parameter_digest_after"
             ):
                 raise RuntimeError(f"{label} changed the frozen base model")
             reload_gate = metadata.get("vllm_same_id_reload_gate")
             if not isinstance(reload_gate, Mapping) or reload_gate.get("passed") is not True:
                 raise RuntimeError(f"{label} did not pass the same-ID vLLM reload gate")
-            if method == "fo_npg" and metadata.get("fo_reverse_mode_modules_called") is not False:
+            if (
+                method in FORWARD_ONLY_METHODS
+                and metadata.get("fo_reverse_mode_modules_called") is not False
+            ):
                 raise RuntimeError("forward-only child lacks its reverse-mode call-graph receipt")
-            if method == "fo_npg" and metadata.get("fo_backprop_module_imported") is not False:
+            if (
+                method in FORWARD_ONLY_METHODS
+                and metadata.get("fo_backprop_module_imported") is not False
+            ):
                 raise RuntimeError("forward-only child imported the reverse-mode module")
             trial_metadata[label] = metadata
             method_receipts = metadata["vllm_lora_reload_receipts"]
@@ -1901,18 +2025,14 @@ def _validate_isolated_trial_outputs(
             expected_enforcement = (
                 False if method == "base" else config.enforce_stochastic_efficacy_checks
             )
-            if (
-                learning_gate.get("stochastic_efficacy_checks_enforced")
-                is not expected_enforcement
-            ):
+            if learning_gate.get("stochastic_efficacy_checks_enforced") is not expected_enforcement:
                 raise RuntimeError(f"{label} efficacy enforcement differs from its config")
             structural_checks = learning_gate.get("hard_structural_checks")
             stochastic_checks = learning_gate.get("stochastic_efficacy_checks")
             if any(
                 not isinstance(checks, Mapping)
                 or any(
-                    value is not None and not isinstance(value, bool)
-                    for value in checks.values()
+                    value is not None and not isinstance(value, bool) for value in checks.values()
                 )
                 for checks in (structural_checks, stochastic_checks)
             ):
@@ -1920,24 +2040,16 @@ def _validate_isolated_trial_outputs(
             assert isinstance(structural_checks, Mapping)
             assert isinstance(stochastic_checks, Mapping)
             observed_structural = {
-                name: value
-                for name, value in structural_checks.items()
-                if value is not None
+                name: value for name, value in structural_checks.items() if value is not None
             }
             observed_stochastic = {
-                name: value
-                for name, value in stochastic_checks.items()
-                if value is not None
+                name: value for name, value in stochastic_checks.items() if value is not None
             }
             expected_failed_structural = sorted(
-                name
-                for name, value in observed_structural.items()
-                if value is not True
+                name for name, value in observed_structural.items() if value is not True
             )
             expected_failed_stochastic = sorted(
-                name
-                for name, value in observed_stochastic.items()
-                if value is not True
+                name for name, value in observed_stochastic.items() if value is not True
             )
             expected_structural_passed = not expected_failed_structural
             expected_stochastic_passed = not expected_failed_stochastic
@@ -1949,10 +2061,8 @@ def _validate_isolated_trial_outputs(
             ):
                 raise RuntimeError(f"{label} efficacy observation summary is inconsistent")
             if (
-                learning_gate.get("hard_structural_checks_passed")
-                is not expected_structural_passed
-                or learning_gate.get("failed_hard_structural_checks")
-                != expected_failed_structural
+                learning_gate.get("hard_structural_checks_passed") is not expected_structural_passed
+                or learning_gate.get("failed_hard_structural_checks") != expected_failed_structural
             ):
                 raise RuntimeError(f"{label} hard structural summary is inconsistent")
             expected_passed = expected_structural_passed and (
@@ -2013,20 +2123,84 @@ def _validate_isolated_trial_outputs(
                     raise RuntimeError("BP gradient-accumulation call count mismatch")
             elif final.get("backward_calls") != 0:
                 raise RuntimeError("forward-only trial contains reverse-mode calls")
-            if final.get("teacher_forced_examples", 0) < (
-                config.steps * config.responses_per_step
-            ):
+            if final.get("teacher_forced_examples", 0) < (config.steps * config.responses_per_step):
                 raise RuntimeError(f"{label} omitted frozen-HF old-policy rescoring compute")
             first = train_records[0]
             first_rollouts.setdefault(seed, {})[method] = (
                 str(first["rollout_token_digest"]),
                 str(first["behavior_logprob_digest"]),
             )
+            if method == "fo_focus_npg":
+                if first.get("focus_bootstrap_b_only") is not True:
+                    raise RuntimeError(
+                        "FOCUS did not begin with the standard-LoRA B-only bootstrap"
+                    )
+                expected_a_updates = 0
+                for expected_step, record in enumerate(train_records, start=1):
+                    bootstrap = record.get("focus_bootstrap_b_only")
+                    if not isinstance(bootstrap, bool):
+                        raise TypeError("FOCUS bootstrap telemetry is not boolean")
+                    if expected_step > 1 and bootstrap:
+                        raise RuntimeError("FOCUS repeated its one-round B-only bootstrap")
+                    expected_a_updates += int(not bootstrap)
+                    if record.get("focus_b_update_count") != expected_step:
+                        raise RuntimeError("FOCUS B covariance state did not persist across steps")
+                    a_updates = record.get("focus_a_update_count")
+                    if a_updates != expected_a_updates:
+                        raise RuntimeError("FOCUS A covariance update count is invalid")
+                    if record.get("focus_state_update_policy_evaluations") != 0:
+                        raise RuntimeError(
+                            "FOCUS covariance observation used extra model evaluations"
+                        )
+                    trials = record.get("line_search_trials")
+                    if (
+                        isinstance(trials, bool)
+                        or not isinstance(trials, int)
+                        or not 0 <= trials <= config.forward.line_search_steps
+                    ):
+                        raise RuntimeError("FOCUS line-search telemetry is invalid")
+                    if record.get("policy_evaluations") != (2 * config.forward.directions + trials):
+                        raise RuntimeError("FOCUS policy-evaluation accounting is inconsistent")
+                    if record.get("focus_first_half_prompts") != config.batch_size // 2 or (
+                        record.get("focus_second_half_prompts") != config.batch_size // 2
+                    ):
+                        raise RuntimeError(
+                            "FOCUS did not use the deterministic equal prompt halves"
+                        )
+                    expected_sketches = 1 if bootstrap else 2
+                    if record.get("focus_cross_sketch_count") != expected_sketches:
+                        raise RuntimeError("FOCUS cross-sketch family count is invalid")
+                    for rank_key in ("focus_a_rank", "focus_b_rank"):
+                        rank = record.get(rank_key)
+                        if (
+                            isinstance(rank, bool)
+                            or not isinstance(rank, int)
+                            or not 0 <= rank <= config.focus.family_rank
+                        ):
+                            raise RuntimeError("FOCUS covariance rank telemetry is invalid")
+                    state_numel = record.get("focus_state_numel")
+                    state_cap = record.get("focus_state_numel_cap")
+                    if (
+                        isinstance(state_numel, bool)
+                        or not isinstance(state_numel, int)
+                        or isinstance(state_cap, bool)
+                        or not isinstance(state_cap, int)
+                        or not 0 <= state_numel <= state_cap
+                    ):
+                        raise RuntimeError("FOCUS covariance state exceeded its storage cap")
+                    expected_cap = (
+                        config.expected_lora_parameter_count * config.focus.family_rank
+                        + 2 * config.focus.family_rank
+                    )
+                    if state_cap != expected_cap:
+                        raise RuntimeError("FOCUS covariance state cap is inconsistent")
     for seed, method_receipts in first_rollouts.items():
-        if method_receipts.get("bp_grpo") != method_receipts.get("fo_npg"):
-            raise RuntimeError(
-                f"seed {seed} BP/FO first-rollout token or sampler-logprob digests differ"
-            )
+        bp_receipt = method_receipts.get("bp_grpo")
+        for method in config.methods:
+            if method in FORWARD_ONLY_METHODS and method_receipts.get(method) != bp_receipt:
+                raise RuntimeError(
+                    f"seed {seed} BP/{method} first-rollout token or sampler-logprob digests differ"
+                )
     return trial_metadata, reload_receipts
 
 
@@ -2082,9 +2256,7 @@ def run_matched_lora_benchmark(
         ],
         check=True,
     )
-    trl_differential = _load_json_mapping(
-        output / "diagnostics" / "trl_1_10_differential.json"
-    )
+    trl_differential = _load_json_mapping(output / "diagnostics" / "trl_1_10_differential.json")
     if trl_differential.get("passed") is not True:
         raise RuntimeError("TRL differential did not certify the matched BP objective")
 
@@ -2121,7 +2293,11 @@ def run_matched_lora_benchmark(
     # optimizer state, and autograd mode.  In particular, FO never follows a
     # BP trial in-process.
     for seed in config.seeds:
-        methods = config.methods if seed == config.seeds[0] else [m for m in config.methods if m != "base"]
+        methods = (
+            config.methods
+            if seed == config.seeds[0]
+            else [m for m in config.methods if m != "base"]
+        )
         for method in methods:
             subprocess.run(
                 [
@@ -2153,7 +2329,9 @@ def run_matched_lora_benchmark(
         {str(value["resolved_model_snapshot"]) for value in trial_metadata.values()}
     )
     if len(resolved_snapshots) != 1:
-        raise RuntimeError(f"isolated trials resolved different model snapshots: {resolved_snapshots}")
+        raise RuntimeError(
+            f"isolated trials resolved different model snapshots: {resolved_snapshots}"
+        )
 
     exclusions = _load_json_mapping(config.touched_test_exclusions)["test_example_ids"]
     metadata = {
@@ -2181,9 +2359,9 @@ def run_matched_lora_benchmark(
         "evaluation_manifest_dev_ids_sha256": eval_manifest.dev_ids_sha256,
         "evaluation_manifest_locked_test_ids_sha256": eval_manifest.locked_test_ids_sha256,
         "dev_source_index_receipt_path": config.dev_source_index_receipt,
-        "dev_source_index_receipt_sha256": _load_json_mapping(
-            config.dev_source_index_receipt
-        )["receipt_sha256"],
+        "dev_source_index_receipt_sha256": _load_json_mapping(config.dev_source_index_receipt)[
+            "receipt_sha256"
+        ],
         "development_row_loading": "Dataset.select(committed_dev_source_indices)",
         "locked_test_rows_materialized": False,
         "locked_test_accessed": False,
@@ -2271,9 +2449,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         if args.child_method is not None:
             parser.error("--gradient-oracle-seed and --child-method are mutually exclusive")
         if args.output is None or args.expected_source_commit is None:
-            parser.error(
-                "--gradient-oracle-seed requires --output and --expected-source-commit"
-            )
+            parser.error("--gradient-oracle-seed requires --output and --expected-source-commit")
         _run_projected_gradient_oracle_child(
             config,
             args.output,
@@ -2283,9 +2459,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         return
     if args.child_method is not None:
         if args.output is None or args.seed is None or args.expected_source_commit is None:
-            parser.error(
-                "--child-method requires --output, --seed, and --expected-source-commit"
-            )
+            parser.error("--child-method requires --output, --seed, and --expected-source-commit")
         _run_isolated_trial_child(
             config,
             args.output,

@@ -16,11 +16,13 @@ from rl_no_backward.evaluation_manifest import (
     write_evaluation_split_manifest,
 )
 from rl_no_backward.gsm8k import GSM8KExample
+from rl_no_backward.matched_lora_forward_only import MatchedForwardConfig
 from rl_no_backward.matched_lora_runner import (
     MatchedLoRAExperimentConfig,
     _init_wandb,
     _learning_gate_status,
     _load_data,
+    _matched_objective_telemetry,
     _old_policy_rescore_accounting,
     _prepare_empty_output_directory,
     _require_output_outside_worktree,
@@ -109,10 +111,38 @@ def test_long_run_configs_lock_matched_full_data_protocol() -> None:
     assert gate.forward.directions == 8
     assert gate.forward.finite_difference_mu == 10.0
     assert gate.dtype == final.dtype == "bfloat16"
-    assert gate.attention_implementation == final.attention_implementation == (
-        "flash_attention_2"
-    )
+    assert gate.attention_implementation == final.attention_implementation == ("flash_attention_2")
     assert gate.rollout_backend == final.rollout_backend == "vllm_lora"
+
+
+def test_focus_ablation_is_optional_and_matches_the_full_gate_budget() -> None:
+    gate = load_matched_config("configs/gsm8k_matched_lora_full_gate.yaml")
+    final = load_matched_config("configs/gsm8k_matched_lora_final.yaml")
+    focus = load_matched_config("configs/gsm8k_matched_lora_focus_ablation.yaml")
+
+    assert gate.methods == final.methods == ["base", "bp_grpo", "fo_npg"]
+    assert focus.methods == ["base", "bp_grpo", "fo_npg", "fo_focus_npg"]
+    assert (focus.train_size, focus.steps, focus.seeds, focus.eval_interval) == (
+        gate.train_size,
+        gate.steps,
+        gate.seeds,
+        gate.eval_interval,
+    )
+    assert focus.response_budget == gate.response_budget == 6_400
+    assert focus.schedule_mode == gate.schedule_mode == "shuffled_cycles"
+    assert focus.enforce_stochastic_efficacy_checks is False
+    assert focus.lora == gate.lora
+    assert focus.objective == gate.objective
+    assert focus.backprop == gate.backprop
+    assert focus.forward == gate.forward
+    assert focus.forward.directions == 8
+    assert focus.focus.family_rank == 2
+
+    with pytest.raises(ValueError, match="q=8"):
+        MatchedLoRAExperimentConfig(
+            methods=["base", "bp_grpo", "fo_npg", "fo_focus_npg"],
+            forward=MatchedForwardConfig(directions=4),
+        )
 
 
 def test_stochastic_efficacy_can_be_observed_without_discarding_run() -> None:
@@ -164,9 +194,7 @@ def test_old_hf_rescore_and_finish_telemetry_are_exact() -> None:
         "teacher_forced_examples": 64,
         "scored_tokens": 1_024,
     }
-    counts, truncation, eos = _rollout_finish_telemetry(
-        (("stop", "length"), ("eos", "stop"))
-    )
+    counts, truncation, eos = _rollout_finish_telemetry((("stop", "length"), ("eos", "stop")))
     assert counts == {"eos": 1, "length": 1, "stop": 2}
     assert truncation == pytest.approx(0.25)
     assert eos == pytest.approx(0.75)
@@ -248,9 +276,7 @@ def test_load_data_consumes_and_validates_full_manifest(monkeypatch, tmp_path) -
             self.selected_indices = list(indices)
             return [self.rows[index] for index in indices]
 
-    raw_rows = [
-        {"question": example.question, "answer": example.answer} for example in official
-    ]
+    raw_rows = [{"question": example.question, "answer": example.answer} for example in official]
     dataset = SelectOnlyDataset(raw_rows)
     monkeypatch.setattr(
         runner_module,
@@ -269,7 +295,9 @@ def test_load_data_consumes_and_validates_full_manifest(monkeypatch, tmp_path) -
     assert loaded.manifest_sha256 == manifest.manifest_sha256
     assert tuple(example.example_id for example in dev) == manifest.dev_example_ids
     assert not ({example.example_id for example in dev} & set(manifest.locked_test_example_ids))
-    assert dataset.selected_indices == [entry["source_index"] for entry in receipt_payload["entries"]]
+    assert dataset.selected_indices == [
+        entry["source_index"] for entry in receipt_payload["entries"]
+    ]
 
     tampered = json.loads(receipt_path.read_text(encoding="utf-8"))
     tampered["entries"][0]["source_index"] += 1
@@ -295,8 +323,54 @@ def test_wandb_root_is_not_double_nested(monkeypatch, tmp_path) -> None:
     assert not tmp_path.joinpath("wandb", "wandb").exists()
 
 
+def test_objective_telemetry_has_shared_jsonl_and_wandb_field_names() -> None:
+    result = SimpleNamespace(
+        surrogate_improvement=0.125,
+        grpo_objective_before=-0.25,
+        grpo_objective_after=-0.125,
+        grpo_loss_before=0.25,
+        grpo_loss_after=0.125,
+        line_search_candidate_grpo_objective=-0.125,
+        line_search_candidate_grpo_loss=0.125,
+        line_search_candidate_surrogate_improvement=0.125,
+        line_search_candidate_empirical_kl=0.001,
+    )
+    telemetry = _matched_objective_telemetry(result)
+
+    assert telemetry == {
+        "surrogate_improvement": 0.125,
+        "grpo_objective_before": -0.25,
+        "grpo_objective_after": -0.125,
+        "grpo_loss_before": 0.25,
+        "grpo_loss_after": 0.125,
+        "line_search_candidate_grpo_objective": -0.125,
+        "line_search_candidate_grpo_loss": 0.125,
+        "line_search_candidate_surrogate_improvement": 0.125,
+        "line_search_candidate_empirical_kl": 0.001,
+    }
+    assert {f"train/{key}" for key, value in telemetry.items() if value is not None} == {
+        "train/surrogate_improvement",
+        "train/grpo_objective_before",
+        "train/grpo_objective_after",
+        "train/grpo_loss_before",
+        "train/grpo_loss_after",
+        "train/line_search_candidate_grpo_objective",
+        "train/line_search_candidate_grpo_loss",
+        "train/line_search_candidate_surrogate_improvement",
+        "train/line_search_candidate_empirical_kl",
+    }
+
+    result.grpo_loss_after = 0.5
+    with pytest.raises(RuntimeError, match="negative fixed-rollout objective"):
+        _matched_objective_telemetry(result)
+
+
 def test_isolated_output_validator_requires_distinct_children_and_exact_counters(tmp_path) -> None:
-    config = MatchedLoRAExperimentConfig(steps=1, eval_interval=1)
+    config = MatchedLoRAExperimentConfig(
+        methods=["base", "bp_grpo", "fo_npg", "fo_focus_npg"],
+        steps=1,
+        eval_interval=1,
+    )
     (tmp_path / "trial_metadata").mkdir()
     (tmp_path / "raw").mkdir()
     (tmp_path / "learning_gate").mkdir()
@@ -304,7 +378,12 @@ def test_isolated_output_validator_requires_distinct_children_and_exact_counters
         "adapter_path_transient": True,
         "durable_hash_fields": ["state_digest", "adapter_model_sha256"],
     }
-    for method, process_id in (("base", 91_001), ("bp_grpo", 91_002), ("fo_npg", 91_003)):
+    for method, process_id in (
+        ("base", 91_001),
+        ("bp_grpo", 91_002),
+        ("fo_npg", 91_003),
+        ("fo_focus_npg", 91_004),
+    ):
         metadata = {
             "method": method,
             "seed": 0,
@@ -314,8 +393,12 @@ def test_isolated_output_validator_requires_distinct_children_and_exact_counters
             "frozen_base_parameter_digest_after": "frozen",
             "vllm_same_id_reload_gate": {"passed": True},
             "vllm_lora_reload_receipts": [receipt],
-            "fo_reverse_mode_modules_called": False if method == "fo_npg" else None,
-            "fo_backprop_module_imported": False if method == "fo_npg" else None,
+            "fo_reverse_mode_modules_called": (
+                False if method in {"fo_npg", "fo_focus_npg"} else None
+            ),
+            "fo_backprop_module_imported": (
+                False if method in {"fo_npg", "fo_focus_npg"} else None
+            ),
         }
         (tmp_path / "trial_metadata" / f"{method}_seed0.json").write_text(
             json.dumps(metadata),
@@ -345,6 +428,21 @@ def test_isolated_output_validator_requires_distinct_children_and_exact_counters
                     "rollout_finish_reason_counts": {"stop": 64},
                     "rollout_token_digest": "a" * 64,
                     "behavior_logprob_digest": "b" * 64,
+                    "focus_bootstrap_b_only": (True if method == "fo_focus_npg" else None),
+                    "focus_a_update_count": 0 if method == "fo_focus_npg" else None,
+                    "focus_b_update_count": 1 if method == "fo_focus_npg" else None,
+                    "focus_a_rank": 0 if method == "fo_focus_npg" else None,
+                    "focus_b_rank": 1 if method == "fo_focus_npg" else None,
+                    "focus_state_update_policy_evaluations": (
+                        0 if method == "fo_focus_npg" else None
+                    ),
+                    "focus_first_half_prompts": 4 if method == "fo_focus_npg" else None,
+                    "focus_second_half_prompts": 4 if method == "fo_focus_npg" else None,
+                    "focus_cross_sketch_count": 1 if method == "fo_focus_npg" else None,
+                    "focus_state_numel": 8 if method == "fo_focus_npg" else None,
+                    "focus_state_numel_cap": (2_179_076 if method == "fo_focus_npg" else None),
+                    "policy_evaluations": 16 if method == "fo_focus_npg" else 1,
+                    "line_search_trials": 0,
                 }
             )
         (tmp_path / "raw" / f"gsm8k_{method}_seed0.jsonl").write_text(
@@ -369,7 +467,27 @@ def test_isolated_output_validator_requires_distinct_children_and_exact_counters
         )
 
     metadata, _ = _validate_isolated_trial_outputs(tmp_path, config)
-    assert set(metadata) == {"base_seed0", "bp_grpo_seed0", "fo_npg_seed0"}
+    assert set(metadata) == {
+        "base_seed0",
+        "bp_grpo_seed0",
+        "fo_npg_seed0",
+        "fo_focus_npg_seed0",
+    }
+
+    focus_raw_path = tmp_path / "raw" / "gsm8k_fo_focus_npg_seed0.jsonl"
+    focus_records = [json.loads(line) for line in focus_raw_path.read_text().splitlines()]
+    focus_records[0]["rollout_token_digest"] = "c" * 64
+    focus_raw_path.write_text(
+        "".join(json.dumps(record) + "\n" for record in focus_records),
+        encoding="utf-8",
+    )
+    with pytest.raises(RuntimeError, match="BP/fo_focus_npg first-rollout"):
+        _validate_isolated_trial_outputs(tmp_path, config)
+    focus_records[0]["rollout_token_digest"] = "a" * 64
+    focus_raw_path.write_text(
+        "".join(json.dumps(record) + "\n" for record in focus_records),
+        encoding="utf-8",
+    )
 
     observed_config = MatchedLoRAExperimentConfig(
         steps=1,

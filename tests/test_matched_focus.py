@@ -151,8 +151,8 @@ def test_cross_sketch_ema_matches_dense_positive_rank_two_update() -> None:
     second = torch.tensor([0.5, 3.0])
     state.update(first, second)
 
-    dense = (1.0 - config.ema_decay) * 0.5 * (
-        torch.outer(first, second) + torch.outer(second, first)
+    dense = (
+        (1.0 - config.ema_decay) * 0.5 * (torch.outer(first, second) + torch.outer(second, first))
     )
     eigenvalues, eigenvectors = torch.linalg.eigh(dense)
     positive = eigenvalues.clamp_min(0)
@@ -208,7 +208,9 @@ def test_split_q8_basis_is_strictly_a_b_disjoint_with_two_scouts_each() -> None:
     )
     assert plan.raw_families == ("A",) * 4 + ("B",) * 4
     assert plan.raw_kinds == ("fill", "fill", "scout", "scout") * 2
-    assert [(pair.family, pair.first_raw_column, pair.second_raw_column) for pair in plan.scout_pairs] == [
+    assert [
+        (pair.family, pair.first_raw_column, pair.second_raw_column) for pair in plan.scout_pairs
+    ] == [
         ("A", 2, 3),
         ("B", 6, 7),
     ]
@@ -227,7 +229,9 @@ def test_split_q8_basis_is_strictly_a_b_disjoint_with_two_scouts_each() -> None:
     torch.testing.assert_close(plan.basis.T @ plan.basis, torch.eye(8), atol=2.0e-6, rtol=2.0e-6)
 
 
-def test_half_batch_coordinate_api_builds_exact_raw_sketches_and_updates_only_planned_family() -> None:
+def test_half_batch_coordinate_api_builds_exact_raw_sketches_and_updates_only_planned_family() -> (
+    None
+):
     partition = _partition()
     state = MatchedFocusState(partition, FocusCovarianceConfig(ema_decay=0.5))
     plan = build_focus_probe_plan(

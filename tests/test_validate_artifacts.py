@@ -20,10 +20,18 @@ def _config() -> dict[str, Any]:
         "steps": 4,
         "batch_size": 2,
         "group_size": 3,
+        "scoring_micro_batch_size": 6,
         "eval_interval": 2,
         "run_test_evaluation": True,
         "test_size": 3,
         "wandb_mode": "offline",
+        "expected_lora_parameter_count": 30,
+        "forward": {
+            "directions": 8,
+            "line_search_steps": 2,
+            "scoring_micro_batch_size": 6,
+        },
+        "focus": {"family_rank": 2},
     }
 
 
@@ -45,11 +53,13 @@ def _evaluation(
         "wall_time_seconds": float(step * 10),
         "environment_samples": environment_samples,
         "generated_tokens": environment_samples * 5,
-        "scored_tokens": environment_samples * (18 if method == "fo_npg" else 10),
+        "scored_tokens": environment_samples
+        * (90 if method == "fo_focus_npg" else 18 if method == "fo_npg" else 10),
         "forward_calls": forward_calls,
         "full_prefix_calls": forward_calls,
         "suffix_calls": forward_calls,
         "backward_calls": backward_calls,
+        "teacher_forced_examples": (environment_samples * 18 if method == "fo_focus_npg" else 0),
         "peak_gpu_memory_bytes": 1024 + step,
         "peak_gpu_memory_allocated_bytes": 1024 + step,
         "peak_gpu_memory_reserved_bytes": 2048 + step,
@@ -70,7 +80,8 @@ def _evaluation(
 
 def _records(method: str, seed: int, config: dict[str, Any]) -> list[dict[str, Any]]:
     is_base = method == "base"
-    is_forward = method == "fo_npg"
+    is_forward = method in {"fo_npg", "fo_focus_npg"}
+    is_focus = method == "fo_focus_npg"
     records = [
         _evaluation(
             method,
@@ -85,7 +96,7 @@ def _records(method: str, seed: int, config: dict[str, Any]) -> list[dict[str, A
         samples_per_step = config["batch_size"] * config["group_size"]
         for step in range(1, config["steps"] + 1):
             backward_calls = 0 if is_forward else step
-            forward_calls = step * (8 if is_forward else 3)
+            forward_calls = step * (18 if is_focus else 8 if is_forward else 3)
             environment_samples = step * samples_per_step
             records.append(
                 {
@@ -96,17 +107,41 @@ def _records(method: str, seed: int, config: dict[str, Any]) -> list[dict[str, A
                     "wall_time_seconds": float(step * 10 - 1),
                     "environment_samples": environment_samples,
                     "generated_tokens": environment_samples * 5,
-                    "scored_tokens": environment_samples * (18 if is_forward else 10),
+                    "scored_tokens": environment_samples
+                    * (90 if is_focus else 18 if is_forward else 10),
                     "forward_calls": forward_calls,
                     "full_prefix_calls": forward_calls,
                     "suffix_calls": forward_calls,
                     "backward_calls": backward_calls,
+                    "teacher_forced_examples": (environment_samples * 18 if is_focus else 0),
                     "peak_gpu_memory_bytes": 1024 + step,
                     "peak_gpu_memory_allocated_bytes": 1024 + step,
                     "peak_gpu_memory_reserved_bytes": 2048 + step,
                     "rollout_and_old_score_seconds": 2.0,
                     "optimizer_seconds": 3.0,
                     "derivative_variance": None,
+                    **(
+                        {
+                            "focus_bootstrap_b_only": step == 1,
+                            "focus_a_rank": min(step - 1, 2),
+                            "focus_b_rank": min(step, 2),
+                            "focus_a_update_count": step - 1,
+                            "focus_b_update_count": step,
+                            "focus_state_numel": 8,
+                            "focus_state_numel_cap": 64,
+                            "focus_first_half_prompts": 1,
+                            "focus_second_half_prompts": 1,
+                            "focus_cross_sketch_count": 1 if step == 1 else 2,
+                            "focus_state_update_policy_evaluations": 0,
+                            "line_search_trials": 1,
+                            "policy_evaluations": 17,
+                            "old_policy_rescore_forward_calls": 1,
+                            "old_policy_rescore_teacher_forced_examples": 6,
+                            "old_policy_rescore_scored_tokens": 30,
+                        }
+                        if is_focus
+                        else {}
+                    ),
                 }
             )
             if step % config["eval_interval"] == 0:
@@ -121,8 +156,12 @@ def _records(method: str, seed: int, config: dict[str, Any]) -> list[dict[str, A
                     )
                 )
     if config["run_test_evaluation"]:
-        final_samples = 0 if is_base else config["steps"] * config["batch_size"] * config["group_size"]
-        final_forward = 0 if is_base else config["steps"] * (8 if is_forward else 3)
+        final_samples = (
+            0 if is_base else config["steps"] * config["batch_size"] * config["group_size"]
+        )
+        final_forward = (
+            0 if is_base else config["steps"] * (18 if is_focus else 8 if is_forward else 3)
+        )
         final_backward = 0 if is_base or is_forward else config["steps"]
         records.append(
             _evaluation(
@@ -154,9 +193,15 @@ def _expected_trials(config: dict[str, Any]) -> list[tuple[str, int]]:
     return trials
 
 
-def _build_complete_artifacts(root: Path) -> tuple[Path, dict[str, Any]]:
+def _build_complete_artifacts(
+    root: Path,
+    *,
+    include_focus: bool = False,
+) -> tuple[Path, dict[str, Any]]:
     output = root / "benchmark"
     config = _config()
+    if include_focus:
+        config["methods"].append("fo_focus_npg")
     metadata = {
         "config": config,
         "git_commit": "0123456789abcdef0123456789abcdef01234567",
@@ -223,6 +268,75 @@ def test_complete_synthetic_sweep_passes_library_and_cli(
     assert result.errors == ()
     assert main([str(output)]) == 0
     assert capsys.readouterr().out.startswith("COMPLETE:")
+
+
+def test_optional_focus_run_is_validated_as_forward_only(tmp_path: Path) -> None:
+    output, _ = _build_complete_artifacts(tmp_path, include_focus=True)
+
+    result = validate_benchmark_artifacts(output)
+
+    assert result.status == "complete"
+    assert result.expected_runs == 7
+    assert result.validated_runs == 7
+    assert result.errors == ()
+
+    focus_raw = output / "raw" / "math_fo_focus_npg_seed1.jsonl"
+    records = _load_records(focus_raw)
+    records[-1]["backward_calls"] = 1
+    _write_jsonl(focus_raw, records)
+    broken = validate_benchmark_artifacts(output)
+    assert broken.status == "invalid"
+    assert any("fo_focus_npg/seed-1 is forward-only" in message for message in broken.errors)
+
+
+@pytest.mark.parametrize(
+    ("train_index", "key", "value", "expected_message"),
+    [
+        (1, "focus_bootstrap_b_only", True, "one B-only bootstrap"),
+        (1, "focus_state_update_policy_evaluations", 1, "used extra policy evaluations"),
+        (1, "focus_a_update_count", 0, "A-state update count"),
+        (1, "focus_b_update_count", 1, "B-state update count"),
+        (1, "focus_a_rank", 3, "exceeds the configured rank cap"),
+        (1, "focus_first_half_prompts", 0, "first prompt half has the wrong size"),
+        (1, "focus_state_numel_cap", 63, "state cap does not match"),
+        (1, "focus_state_numel", 65, "state exceeds"),
+        (1, "focus_cross_sketch_count", 1, "cross-sketch family count"),
+        (1, "policy_evaluations", 18, "not q8 probes plus line search"),
+        (1, "forward_calls", 37, "forward-call delta includes unaccounted"),
+    ],
+)
+def test_focus_publication_audit_rejects_inconsistent_raw_telemetry(
+    tmp_path: Path,
+    train_index: int,
+    key: str,
+    value: Any,
+    expected_message: str,
+) -> None:
+    output, _ = _build_complete_artifacts(tmp_path, include_focus=True)
+    focus_raw = output / "raw" / "math_fo_focus_npg_seed0.jsonl"
+    records = _load_records(focus_raw)
+    train_records = [record for record in records if record.get("kind") == "train_step"]
+    train_records[train_index][key] = value
+    _write_jsonl(focus_raw, records)
+
+    result = validate_benchmark_artifacts(output)
+
+    assert result.status == "invalid"
+    assert any(expected_message in message for message in result.errors)
+
+
+def test_focus_publication_audit_requires_q8_in_embedded_metadata(tmp_path: Path) -> None:
+    output, metadata = _build_complete_artifacts(tmp_path, include_focus=True)
+    metadata["config"]["forward"]["directions"] = 7
+    (output / "metadata.json").write_text(
+        json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    result = validate_benchmark_artifacts(output)
+
+    assert result.status == "invalid"
+    assert any("FOCUS requires q=8" in message for message in result.errors)
 
 
 def test_trailing_partial_jsonl_is_clearly_incomplete(
@@ -340,7 +454,9 @@ def test_evaluation_counts_environment_budget_and_explicit_test_are_enforced(
     output, _ = _build_complete_artifacts(tmp_path)
     raw = output / "raw" / "math_bp_grpo_seed0.jsonl"
     records = _load_records(raw)
-    records = [record for record in records if not (record["kind"] == "train_step" and record["step"] == 4)]
+    records = [
+        record for record in records if not (record["kind"] == "train_step" and record["step"] == 4)
+    ]
     test_record = next(record for record in records if record.get("split") == "test")
     test_record.pop("split")
     test_record["environment_samples"] = 18

@@ -26,6 +26,10 @@ class MatchedBackpropStepResult:
     zero_advantage_fraction: float
     empirical_kl: float
     surrogate_improvement: float
+    grpo_objective_before: float
+    grpo_objective_after: float
+    grpo_loss_before: float
+    grpo_loss_after: float
     step_norm: float
     projected_gradient_norm: float
     policy_evaluations: int
@@ -34,6 +38,36 @@ class MatchedBackpropStepResult:
     environment_samples: int
     teacher_forced_examples: int
     scored_tokens: int
+
+    def __post_init__(self) -> None:
+        objective_values = (
+            self.grpo_objective_before,
+            self.grpo_objective_after,
+            self.grpo_loss_before,
+            self.grpo_loss_after,
+            self.surrogate_improvement,
+        )
+        if not all(math.isfinite(value) for value in objective_values):
+            raise ValueError("GRPO objective telemetry must be finite")
+        if not math.isclose(
+            self.grpo_loss_before,
+            -self.grpo_objective_before,
+            rel_tol=1.0e-9,
+            abs_tol=1.0e-9,
+        ) or not math.isclose(
+            self.grpo_loss_after,
+            -self.grpo_objective_after,
+            rel_tol=1.0e-9,
+            abs_tol=1.0e-9,
+        ):
+            raise ValueError("GRPO loss telemetry must equal the negative objective")
+        if not math.isclose(
+            self.surrogate_improvement,
+            self.grpo_objective_after - self.grpo_objective_before,
+            rel_tol=1.0e-9,
+            abs_tol=1.0e-9,
+        ):
+            raise ValueError("surrogate improvement does not match the fixed-rollout objective")
 
 
 def _slice_prompt_groups(
@@ -100,7 +134,9 @@ def make_matched_lora_optimizer(
     config: MatchedBackpropConfig,
 ) -> torch.optim.Optimizer:
     set_adapter_grad_enabled(bundle, True)
-    actual_trainable = {name for name, parameter in bundle.model.named_parameters() if parameter.requires_grad}
+    actual_trainable = {
+        name for name, parameter in bundle.model.named_parameters() if parameter.requires_grad
+    }
     if actual_trainable != set(bundle.adapter_names):
         raise RuntimeError(
             "reverse-mode trainable parameter set does not exactly match the locked LoRA layout"
@@ -174,38 +210,49 @@ def matched_backprop_grpo_step(
             chunk = _slice_prompt_groups(rollout, start, end)
             final_logps = teacher_forced_token_log_probs(bundle, chunk)
             weight = (end - start) / rollout.batch_size
-            final_objective_sum += float(
-                matched_token_grpo_surrogate(
-                    final_logps,
-                    chunk.old_token_log_probs,
-                    sampler_token_log_probs[start:end],
-                    chunk.advantages,
-                    chunk.response_mask,
-                    objective_config,
-                ).item()
-            ) * weight
-            final_kl_sum += float(
-                sampled_hf_policy_kl(
-                    final_logps,
-                    chunk.old_token_log_probs,
-                    chunk.response_mask,
-                    sampling_weights=detached_inference_correction(
+            final_objective_sum += (
+                float(
+                    matched_token_grpo_surrogate(
+                        final_logps,
                         chunk.old_token_log_probs,
                         sampler_token_log_probs[start:end],
+                        chunk.advantages,
                         chunk.response_mask,
                         objective_config,
-                    ),
-                ).item()
-            ) * weight
+                    ).item()
+                )
+                * weight
+            )
+            final_kl_sum += (
+                float(
+                    sampled_hf_policy_kl(
+                        final_logps,
+                        chunk.old_token_log_probs,
+                        chunk.response_mask,
+                        sampling_weights=detached_inference_correction(
+                            chunk.old_token_log_probs,
+                            sampler_token_log_probs[start:end],
+                            chunk.response_mask,
+                            objective_config,
+                        ),
+                    ).item()
+                )
+                * weight
+            )
             final_calls += 1
     zero_groups = rollout.advantages.abs().amax(dim=1).eq(0)
     forward_calls = backward_calls + final_calls
+    surrogate_improvement = final_objective_sum - initial_objective
     return MatchedBackpropStepResult(
         accepted=True,
         reward_mean=float(rollout.rewards.mean().item()),
         zero_advantage_fraction=float(zero_groups.float().mean().item()),
         empirical_kl=final_kl_sum,
-        surrogate_improvement=final_objective_sum - initial_objective,
+        surrogate_improvement=surrogate_improvement,
+        grpo_objective_before=initial_objective,
+        grpo_objective_after=final_objective_sum,
+        grpo_loss_before=-initial_objective,
+        grpo_loss_after=-final_objective_sum,
         step_norm=float((after - before).norm().item()),
         projected_gradient_norm=float(grad_norm.item()),
         policy_evaluations=2,

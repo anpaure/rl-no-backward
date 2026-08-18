@@ -9,9 +9,11 @@ The implementation makes four contracts explicit:
 
 * the flattened PEFT policy is partitioned canonically into all ``lora_A`` and
   all ``lora_B`` coordinates;
-* two *raw*, independent Gaussian scouts per family define unbiased gradient
-  sketches, even though the directions evaluated by the model are the stable
-  orthonormal columns obtained by QR;
+* two *raw*, independent Gaussian scouts per family define exact-directional
+  cross sketches in the idealized limit, even though the directions evaluated
+  by the model are the stable orthonormal columns obtained by QR; production
+  finite-radius BF16 sketches remain an approximate heuristic and are not
+  claimed to be an unbiased covariance estimator;
 * a rank-two positive covariance approximation is maintained separately for
   A and B using a truncated exponential moving average of the symmetric
   cross-sketch operator; and
@@ -54,7 +56,9 @@ def _validate_family(family: str) -> LoRAFamily:
 def _family_from_name(name: str) -> LoRAFamily:
     matches = _LORA_FAMILY_PATTERN.findall(name)
     if len(matches) != 1:
-        raise ValueError(f"LoRA tensor name must contain exactly one lora_A/lora_B marker: {name!r}")
+        raise ValueError(
+            f"LoRA tensor name must contain exactly one lora_A/lora_B marker: {name!r}"
+        )
     return cast(LoRAFamily, matches[0])
 
 
@@ -156,7 +160,9 @@ class CanonicalLoRAPartition:
                 }
             )
 
-        incomplete = sorted(key for key, value in pairs.items() if set(value) != set(FOCUS_FAMILIES))
+        incomplete = sorted(
+            key for key, value in pairs.items() if set(value) != set(FOCUS_FAMILIES)
+        )
         if incomplete:
             raise ValueError(f"LoRA modules do not have paired A/B tensors: {incomplete[:8]}")
         for key, value in pairs.items():
@@ -239,7 +245,9 @@ class CanonicalLoRAPartition:
         return self.embed(a_values, "A") + self.embed(b_values, "B")
 
 
-def canonical_lora_partition(model_or_layout: nn.Module | LoRAParameterLayout) -> CanonicalLoRAPartition:
+def canonical_lora_partition(
+    model_or_layout: nn.Module | LoRAParameterLayout,
+) -> CanonicalLoRAPartition:
     """Build the canonical A/B partition from a model or an existing layout."""
 
     if isinstance(model_or_layout, LoRAParameterLayout):
@@ -436,7 +444,10 @@ class CrossSketchCovarianceEMA:
             )
             self.eigenvalues = torch.empty(0, device=self.device, dtype=self.dtype)
         self.update_count += 1
-        if self.persistent_numel > self.dimension * self.config.family_rank + self.config.family_rank:
+        if (
+            self.persistent_numel
+            > self.dimension * self.config.family_rank + self.config.family_rank
+        ):
             raise RuntimeError("cross-sketch state exceeded its O(Pk) storage cap")
 
     @torch.inference_mode()
@@ -583,7 +594,11 @@ class FocusProbePlan:
         return orthonormal_coordinates @ transform
 
     def raw_direction(self, index: int) -> Tensor:
-        if isinstance(index, bool) or not isinstance(index, int) or not 0 <= index < self.directions:
+        if (
+            isinstance(index, bool)
+            or not isinstance(index, int)
+            or not 0 <= index < self.directions
+        ):
             raise IndexError("raw direction index is out of range")
         return self.basis @ self.reconstruction[:, index]
 
@@ -630,7 +645,9 @@ class FocusProbePlan:
         second_raw = self.reconstruct_raw_derivatives(second_half_coordinates)
         observations: list[FocusCrossSketch] = []
         for pair in self.scout_pairs:
-            first_direction = partition.gather(self.raw_direction(pair.first_raw_column), pair.family)
+            first_direction = partition.gather(
+                self.raw_direction(pair.first_raw_column), pair.family
+            )
             second_direction = partition.gather(
                 self.raw_direction(pair.second_raw_column), pair.family
             )

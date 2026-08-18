@@ -14,7 +14,9 @@ from rl_no_backward.matched_grpo_objective import (
 )
 from rl_no_backward.matched_lora_backprop import (
     MatchedBackpropConfig,
+    make_matched_lora_optimizer,
     make_matched_lr_scheduler,
+    matched_backprop_grpo_step,
     matched_grpo_streaming_backward,
 )
 from rl_no_backward.model import ModelBundle
@@ -26,7 +28,9 @@ class _ToyPolicy(nn.Module):
         super().__init__()
         self.base = nn.Parameter(torch.linspace(-0.3, 0.3, 7), requires_grad=False)
         self.lora = nn.Parameter(torch.tensor([0.02, -0.01, 0.03]))
-        self.register_buffer("features", torch.randn(7, 3, generator=torch.Generator().manual_seed(9)))
+        self.register_buffer(
+            "features", torch.randn(7, 3, generator=torch.Generator().manual_seed(9))
+        )
 
     def forward(self, *, input_ids: Tensor, attention_mask: Tensor, use_cache: bool):
         del attention_mask, use_cache
@@ -115,3 +119,54 @@ def test_warmup_starts_at_zero_like_transformers_scheduler() -> None:
     optimizer.step()
     scheduler.step()
     assert optimizer.param_groups[0]["lr"] == pytest.approx(1.0e-5 / 3)
+
+
+def test_backprop_step_reports_same_rollout_objective_and_negative_loss() -> None:
+    bundle, rollout, sampler = _fixture()
+    objective_config = MatchedGRPOObjectiveConfig(
+        inference_correction_mode="token_truncate",
+        inference_ratio_min=0.1,
+        inference_ratio_max=3.0,
+    )
+    optimizer_config = MatchedBackpropConfig(
+        learning_rate=0.02,
+        fused_adamw=False,
+    )
+    optimizer = make_matched_lora_optimizer(bundle, optimizer_config)
+    expected_before = float(
+        matched_token_grpo_surrogate(
+            rollout.old_token_log_probs,
+            rollout.old_token_log_probs,
+            sampler,
+            rollout.advantages,
+            rollout.response_mask,
+            objective_config,
+        ).item()
+    )
+
+    result = matched_backprop_grpo_step(
+        bundle,
+        rollout,
+        sampler,
+        optimizer,
+        objective_config,
+        optimizer_config,
+    )
+    with torch.inference_mode():
+        new_logps = teacher_forced_token_log_probs(bundle, rollout)
+        expected_after = float(
+            matched_token_grpo_surrogate(
+                new_logps,
+                rollout.old_token_log_probs,
+                sampler,
+                rollout.advantages,
+                rollout.response_mask,
+                objective_config,
+            ).item()
+        )
+
+    assert result.grpo_objective_before == pytest.approx(expected_before)
+    assert result.grpo_objective_after == pytest.approx(expected_after)
+    assert result.grpo_loss_before == pytest.approx(-expected_before)
+    assert result.grpo_loss_after == pytest.approx(-expected_after)
+    assert result.surrogate_improvement == pytest.approx(expected_after - expected_before)
