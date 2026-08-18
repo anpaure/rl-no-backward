@@ -112,8 +112,6 @@ def matched_forward_npg_step(
 
     positive_logps: list[Tensor] = []
     negative_logps: list[Tensor] = []
-    positive_objectives: list[Tensor] = []
-    negative_objectives: list[Tensor] = []
     try:
         for direction_index in range(config.directions):
             direction = basis[:, direction_index]
@@ -124,16 +122,6 @@ def matched_forward_npg_step(
                 micro_batch_size=config.scoring_micro_batch_size,
             )
             positive_logps.append(positive)
-            positive_objectives.append(
-                matched_token_grpo_surrogate(
-                    positive,
-                    rollout.old_token_log_probs,
-                    sampler_token_log_probs,
-                    rollout.advantages,
-                    rollout.response_mask,
-                    objective_config,
-                )
-            )
 
             set_parameter_vector(bundle, center - config.finite_difference_mu * direction)
             negative = teacher_forced_token_log_probs(
@@ -142,16 +130,6 @@ def matched_forward_npg_step(
                 micro_batch_size=config.scoring_micro_batch_size,
             )
             negative_logps.append(negative)
-            negative_objectives.append(
-                matched_token_grpo_surrogate(
-                    negative,
-                    rollout.old_token_log_probs,
-                    sampler_token_log_probs,
-                    rollout.advantages,
-                    rollout.response_mask,
-                    objective_config,
-                )
-            )
     finally:
         set_parameter_vector(bundle, center)
 
@@ -168,12 +146,16 @@ def matched_forward_npg_step(
         negative_stack,
         rollout,
         config.finite_difference_mu,
-        length_normalize=False,
+        length_normalize=True,
         sampling_weights=inference_weights,
     )
-    objective_coordinates = (
-        torch.stack(positive_objectives) - torch.stack(negative_objectives)
-    ) / (2.0 * config.finite_difference_mu)
+    # At the rollout center the unclipped and clipped PPO ratios both equal one.
+    # The exact fixed-rollout GRPO directional derivative is therefore the
+    # advantage-weighted token log-probability score, including the detached
+    # inference correction and the objective's per-completion normalization.
+    # Forming that statistic directly avoids catastrophic cancellation from
+    # subtracting two nearly identical batch-reduced scalar objectives.
+    objective_coordinates = statistics.gradient
     fisher_scale = (torch.trace(statistics.fisher) / config.directions).clamp_min(1.0e-8)
     regularized_fisher = statistics.fisher + config.fisher_damping * fisher_scale * torch.eye(
         config.directions,
@@ -257,7 +239,6 @@ def matched_forward_npg_step(
     probe_evaluations = 2 * config.directions
     policy_evaluations = probe_evaluations + search_evaluations
     micro_batches = math.ceil(rollout.environment_samples / config.scoring_micro_batch_size)
-    directional_rewards = torch.stack(positive_objectives) - torch.stack(negative_objectives)
     zero_groups = rollout.advantages.abs().amax(dim=1).eq(0)
     return MatchedForwardStepResult(
         accepted=accepted,
@@ -275,7 +256,7 @@ def matched_forward_npg_step(
         environment_samples=rollout.environment_samples,
         teacher_forced_examples=policy_evaluations * rollout.environment_samples,
         scored_tokens=policy_evaluations * rollout.valid_response_tokens,
-        derivative_variance=float(directional_rewards.var(unbiased=False).item()),
+        derivative_variance=float(objective_coordinates.var(unbiased=False).item()),
     )
 
 

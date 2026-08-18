@@ -60,9 +60,14 @@ def _fixture() -> tuple[ModelBundle, SequenceRolloutBatch, Tensor]:
         completions=(("x", "y"), ("x", "y")),
         prompt_input_ids=torch.tensor([[0, 2], [2, 3]]),
         prompt_attention_mask=torch.tensor([[False, True], [True, True]]),
-        response_input_ids=torch.tensor([[[4, 1], [5, 1]], [[6, 1], [4, 1]]]),
-        response_mask=torch.ones(2, 2, 2, dtype=torch.bool),
-        old_token_log_probs=torch.zeros(2, 2, 2),
+        response_input_ids=torch.tensor([[[4, 1, 0], [5, 6, 1]], [[6, 5, 1], [4, 0, 0]]]),
+        response_mask=torch.tensor(
+            [
+                [[True, True, False], [True, True, True]],
+                [[True, True, True], [True, False, False]],
+            ]
+        ),
+        old_token_log_probs=torch.zeros(2, 2, 3),
         rewards=rewards,
         advantages=trl_group_standardized_advantages(rewards),
         sampling_temperature=1.0,
@@ -72,7 +77,13 @@ def _fixture() -> tuple[ModelBundle, SequenceRolloutBatch, Tensor]:
     with torch.inference_mode():
         old = teacher_forced_token_log_probs(bundle, rollout)
     rollout = replace(rollout, old_token_log_probs=old.detach())
-    return bundle, rollout, (old - 0.001).detach()
+    sampler_offsets = torch.tensor(
+        [
+            [[0.01, 0.04, 0.00], [0.02, 0.05, 0.08]],
+            [[0.03, 0.06, 0.09], [0.07, 0.00, 0.00]],
+        ]
+    )
+    return bundle, rollout, (old - sampler_offsets).detach()
 
 
 def test_multi_mu_diagnostic_matches_exact_gradient_and_restores_everything() -> None:
@@ -86,7 +97,11 @@ def test_multi_mu_diagnostic_matches_exact_gradient_and_restores_everything() ->
         bundle,
         rollout,
         sampler,
-        MatchedGRPOObjectiveConfig(inference_correction_mode="sequence_mask"),
+        MatchedGRPOObjectiveConfig(
+            inference_correction_mode="token_truncate",
+            inference_ratio_min=0.1,
+            inference_ratio_max=3.0,
+        ),
         directions=2,
         basis_seed=70_004,
         mu_values=(1.0e-4, 5.0e-4, 1.0e-3),
@@ -108,7 +123,13 @@ def test_multi_mu_diagnostic_matches_exact_gradient_and_restores_everything() ->
     assert report["exact_gradient_missing_parameter_count"] == 0
     assert report["finite_difference_policy_evaluations"] == 12
     assert all(comparison["passed"] for comparison in report["comparisons"])
-    assert all(comparison["maximum_absolute_error"] is not None for comparison in report["comparisons"])
+    assert all(
+        comparison["coordinate_estimator"] == "center_policy_token_score_statistics"
+        for comparison in report["comparisons"]
+    )
+    assert all(
+        comparison["maximum_absolute_error"] is not None for comparison in report["comparisons"]
+    )
     assert report["integrity"]["adapter_state_restored"]
     assert report["integrity"]["frozen_base_unchanged"]
     assert report["integrity"]["gradient_buffers_restored"]

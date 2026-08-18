@@ -5,12 +5,14 @@ import inspect
 from dataclasses import replace
 from types import SimpleNamespace
 
+import pytest
 import torch
 from torch import Tensor, nn
 
 import rl_no_backward.matched_lora_forward_only as forward_module
 from rl_no_backward.matched_grpo_objective import (
     MatchedGRPOObjectiveConfig,
+    detached_inference_correction,
     trl_group_standardized_advantages,
 )
 from rl_no_backward.matched_lora_forward_only import (
@@ -80,20 +82,51 @@ def _fixture() -> tuple[ModelBundle, SequenceRolloutBatch]:
     return bundle, replace(rollout, old_token_log_probs=old_hf)
 
 
-def test_matched_forward_npg_moves_policy_without_reverse_mode() -> None:
+def test_matched_forward_npg_uses_center_score_gradient_and_weighted_fisher(
+    monkeypatch,
+) -> None:
     bundle, rollout = _fixture()
-    sampler_logps = rollout.old_token_log_probs - 0.002 * rollout.response_mask
+    sampler_offsets = torch.tensor(
+        [
+            [[0.01, 0.04, 0.00], [0.02, 0.05, 0.08]],
+            [[0.03, 0.06, 0.00], [0.07, 0.09, 0.11]],
+        ]
+    )
+    sampler_logps = rollout.old_token_log_probs - sampler_offsets * rollout.response_mask
+    objective_config = MatchedGRPOObjectiveConfig(
+        inference_correction_mode="token_truncate",
+        inference_ratio_min=0.1,
+        inference_ratio_max=3.0,
+    )
+    original_statistics = forward_module.central_difference_score_statistics
+    captured: dict[str, object] = {}
+
+    def capture_statistics(*args, **kwargs):
+        result = original_statistics(*args, **kwargs)
+        captured.update(
+            {
+                "positive": args[0],
+                "negative": args[1],
+                "radius": args[3],
+                "length_normalize": kwargs["length_normalize"],
+                "sampling_weights": kwargs["sampling_weights"],
+                "result": result,
+            }
+        )
+        return result
+
+    monkeypatch.setattr(
+        forward_module,
+        "central_difference_score_statistics",
+        capture_statistics,
+    )
     before = parameter_vector(bundle).clone()
     result = matched_forward_npg_step(
         bundle,
         rollout,
         sampler_logps,
         torch.Generator().manual_seed(7),
-        MatchedGRPOObjectiveConfig(
-            inference_correction_mode="token_truncate",
-            inference_ratio_min=0.1,
-            inference_ratio_max=3.0,
-        ),
+        objective_config,
         MatchedForwardConfig(
             directions=2,
             finite_difference_mu=0.02,
@@ -108,6 +141,27 @@ def test_matched_forward_npg_moves_policy_without_reverse_mode() -> None:
     assert not torch.equal(parameter_vector(bundle), before)
     assert not bundle.trainable_parameters[0].requires_grad
     assert bundle.trainable_parameters[0].grad is None
+    assert captured["length_normalize"] is True
+    expected_weights = detached_inference_correction(
+        rollout.old_token_log_probs,
+        sampler_logps,
+        rollout.response_mask,
+        objective_config,
+    )
+    torch.testing.assert_close(captured["sampling_weights"], expected_weights)
+    statistics = captured["result"]
+    assert result.projected_gradient_norm == pytest.approx(
+        statistics.gradient.norm().item(),
+    )
+    unweighted = original_statistics(
+        captured["positive"],
+        captured["negative"],
+        rollout,
+        captured["radius"],
+        length_normalize=True,
+        sampling_weights=None,
+    )
+    assert not torch.allclose(statistics.fisher, unweighted.fisher)
 
 
 def test_forward_module_source_has_no_reverse_mode_api_calls() -> None:

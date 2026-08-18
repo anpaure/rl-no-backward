@@ -10,11 +10,18 @@ import torch
 from torch import Tensor
 
 from .common import make_search_basis
-from .matched_grpo_objective import MatchedGRPOObjectiveConfig, matched_token_grpo_surrogate
+from .matched_grpo_objective import (
+    MatchedGRPOObjectiveConfig,
+    detached_inference_correction,
+)
 from .matched_lora_backprop import matched_grpo_streaming_backward
 from .matched_lora_forward_only import MatchedForwardConfig
 from .model import ModelBundle, parameter_vector, set_adapter_grad_enabled, set_parameter_vector
-from .sequence_policy import SequenceRolloutBatch, teacher_forced_token_log_probs
+from .sequence_policy import (
+    SequenceRolloutBatch,
+    central_difference_score_statistics,
+    teacher_forced_token_log_probs,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,7 +55,7 @@ def fixed_rollout_projected_gradient_gate(
     *,
     prompt_groups_per_micro_batch: int = 1,
 ) -> ProjectedGradientGateReport:
-    """Compare q-direction central differences with ``basis.T @ exact_gradient``.
+    """Compare production token-score coordinates with ``basis.T @ exact_gradient``.
 
     This diagnostic performs reverse mode only in its dedicated oracle process,
     never in a forward-only trial.  It restores the byte-equivalent parameter
@@ -60,7 +67,8 @@ def fixed_rollout_projected_gradient_gate(
     original_requires_grad = [parameter.requires_grad for parameter in bundle.trainable_parameters]
     exact_objective_gradient: Tensor | None = None
     basis: Tensor | None = None
-    finite_difference_coordinates: list[Tensor] = []
+    positive_logps: list[Tensor] = []
+    negative_logps: list[Tensor] = []
     try:
         set_adapter_grad_enabled(bundle, True)
         for parameter in bundle.trainable_parameters:
@@ -73,10 +81,16 @@ def fixed_rollout_projected_gradient_gate(
             prompt_groups_per_micro_batch=prompt_groups_per_micro_batch,
         )
         loss_gradient = torch.cat(
-            [parameter.grad.detach().float().reshape(-1) for parameter in bundle.trainable_parameters]
+            [
+                parameter.grad.detach().float().reshape(-1)
+                for parameter in bundle.trainable_parameters
+            ]
         )
         exact_objective_gradient = -loss_gradient
-        if not torch.isfinite(exact_objective_gradient).all() or exact_objective_gradient.norm() == 0:
+        if (
+            not torch.isfinite(exact_objective_gradient).all()
+            or exact_objective_gradient.norm() == 0
+        ):
             raise RuntimeError("exact matched-GRPO gradient is non-finite or zero")
         for parameter in bundle.trainable_parameters:
             parameter.grad = None
@@ -99,14 +113,7 @@ def fixed_rollout_projected_gradient_gate(
                     rollout,
                     micro_batch_size=forward_config.scoring_micro_batch_size,
                 )
-                positive_objective = matched_token_grpo_surrogate(
-                    positive,
-                    rollout.old_token_log_probs,
-                    sampler_token_log_probs,
-                    rollout.advantages,
-                    rollout.response_mask,
-                    objective_config,
-                )
+                positive_logps.append(positive)
                 set_parameter_vector(
                     bundle,
                     center - forward_config.finite_difference_mu * direction,
@@ -116,18 +123,7 @@ def fixed_rollout_projected_gradient_gate(
                     rollout,
                     micro_batch_size=forward_config.scoring_micro_batch_size,
                 )
-                negative_objective = matched_token_grpo_surrogate(
-                    negative,
-                    rollout.old_token_log_probs,
-                    sampler_token_log_probs,
-                    rollout.advantages,
-                    rollout.response_mask,
-                    objective_config,
-                )
-                finite_difference_coordinates.append(
-                    (positive_objective - negative_objective)
-                    / (2.0 * forward_config.finite_difference_mu)
-                )
+                negative_logps.append(negative)
     finally:
         set_parameter_vector(bundle, center)
         for parameter, requires_grad in zip(
@@ -139,7 +135,20 @@ def fixed_rollout_projected_gradient_gate(
             parameter.grad = None
     if exact_objective_gradient is None or basis is None:
         raise RuntimeError("projected-gradient oracle did not produce exact coordinates")
-    finite = torch.stack(finite_difference_coordinates).float()
+    inference_weights = detached_inference_correction(
+        rollout.old_token_log_probs,
+        sampler_token_log_probs,
+        rollout.response_mask,
+        objective_config,
+    )
+    finite = central_difference_score_statistics(
+        torch.stack(positive_logps, dim=-1),
+        torch.stack(negative_logps, dim=-1),
+        rollout,
+        forward_config.finite_difference_mu,
+        length_normalize=True,
+        sampling_weights=inference_weights,
+    ).gradient.float()
     exact = basis.T @ exact_objective_gradient
     if not torch.isfinite(finite).all() or finite.norm() == 0 or exact.norm() == 0:
         raise RuntimeError("projected-gradient coordinates are non-finite or zero")

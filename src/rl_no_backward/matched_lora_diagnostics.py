@@ -2,8 +2,8 @@
 
 This module is a measurement tool, not a trainer.  It deliberately computes an
 exact reverse-mode gradient, then compares its coordinates in the production
-forward-only search basis with central finite differences of the *same* fixed-
-rollout GRPO objective.  The policy is restored byte-for-byte before returning.
+forward-only search basis with the center-policy token-score estimator used by
+the trainer.  The policy is restored byte-for-byte before returning.
 
 The forward-only trainer never imports this module.  Run it as its own process::
 
@@ -33,10 +33,17 @@ import torch
 from torch import Tensor
 
 from .common import make_search_basis
-from .matched_grpo_objective import MatchedGRPOObjectiveConfig, matched_token_grpo_surrogate
+from .matched_grpo_objective import (
+    MatchedGRPOObjectiveConfig,
+    detached_inference_correction,
+)
 from .matched_lora_backprop import matched_grpo_streaming_backward
 from .model import ModelBundle, parameter_vector, set_adapter_grad_enabled, set_parameter_vector
-from .sequence_policy import SequenceRolloutBatch, teacher_forced_token_log_probs
+from .sequence_policy import (
+    SequenceRolloutBatch,
+    central_difference_score_statistics,
+    teacher_forced_token_log_probs,
+)
 from .standard_lora import (
     StandardLoRAConfig,
     frozen_base_parameter_digest,
@@ -64,14 +71,10 @@ class GradientAgreementThresholds:
     def __post_init__(self) -> None:
         if not -1.0 <= self.minimum_cosine_similarity <= 1.0:
             raise ValueError("minimum_cosine_similarity must lie in [-1, 1]")
-        if (
-            not math.isfinite(self.maximum_relative_l2_error)
-            or self.maximum_relative_l2_error <= 0
-        ):
+        if not math.isfinite(self.maximum_relative_l2_error) or self.maximum_relative_l2_error <= 0:
             raise ValueError("maximum_relative_l2_error must be positive and finite")
         if self.maximum_absolute_error is not None and (
-            not math.isfinite(self.maximum_absolute_error)
-            or self.maximum_absolute_error <= 0
+            not math.isfinite(self.maximum_absolute_error) or self.maximum_absolute_error <= 0
         ):
             raise ValueError("maximum_absolute_error must be positive and finite or None")
         if (
@@ -435,57 +438,51 @@ def fixed_rollout_finite_difference_diagnostic(
         set_adapter_grad_enabled(bundle, False)
         exact_coordinates = basis.T @ exact_gradient
 
+        inference_weights = detached_inference_correction(
+            rollout.old_token_log_probs,
+            sampler_token_log_probs,
+            rollout.response_mask,
+            objective_config,
+        )
         with torch.inference_mode():
             for mu in radii:
-                finite_coordinates: list[Tensor] = []
-                positive_objectives: list[float] = []
-                negative_objectives: list[float] = []
+                positive_logps: list[Tensor] = []
+                negative_logps: list[Tensor] = []
                 _synchronize(bundle.device)
                 started = time.perf_counter()
                 for direction_index in range(directions):
                     direction = basis[:, direction_index]
                     set_parameter_vector(bundle, center + mu * direction)
-                    positive_logps = teacher_forced_token_log_probs(
+                    positive = teacher_forced_token_log_probs(
                         bundle,
                         rollout,
                         micro_batch_size=scoring_micro_batch_size,
                     )
-                    positive = matched_token_grpo_surrogate(
-                        positive_logps,
-                        rollout.old_token_log_probs,
-                        sampler_token_log_probs,
-                        rollout.advantages,
-                        rollout.response_mask,
-                        objective_config,
-                    )
+                    positive_logps.append(positive)
 
                     set_parameter_vector(bundle, center - mu * direction)
-                    negative_logps = teacher_forced_token_log_probs(
+                    negative = teacher_forced_token_log_probs(
                         bundle,
                         rollout,
                         micro_batch_size=scoring_micro_batch_size,
                     )
-                    negative = matched_token_grpo_surrogate(
-                        negative_logps,
-                        rollout.old_token_log_probs,
-                        sampler_token_log_probs,
-                        rollout.advantages,
-                        rollout.response_mask,
-                        objective_config,
-                    )
-                    finite_coordinates.append((positive - negative) / (2.0 * mu))
-                    positive_objectives.append(float(positive.item()))
-                    negative_objectives.append(float(negative.item()))
+                    negative_logps.append(negative)
                 _synchronize(bundle.device)
                 elapsed = time.perf_counter() - started
-                finite = torch.stack(finite_coordinates).float()
+                finite = central_difference_score_statistics(
+                    torch.stack(positive_logps, dim=-1),
+                    torch.stack(negative_logps, dim=-1),
+                    rollout,
+                    mu,
+                    length_normalize=True,
+                    sampling_weights=inference_weights,
+                ).gradient.float()
                 agreement = _coordinate_agreement(exact_coordinates, finite, gates)
                 comparisons.append(
                     {
                         "mu": mu,
                         "seconds": elapsed,
-                        "positive_objectives": positive_objectives,
-                        "negative_objectives": negative_objectives,
+                        "coordinate_estimator": "center_policy_token_score_statistics",
                         **agreement,
                     }
                 )
@@ -516,10 +513,7 @@ def fixed_rollout_finite_difference_diagnostic(
     )
     required_mu_passed = bool(
         gates.required_mu is None
-        or (
-            required_mu_comparison is not None
-            and required_mu_comparison["passed"]
-        )
+        or (required_mu_comparison is not None and required_mu_comparison["passed"])
     )
     exact_stats = _finite_statistics(exact_gradient)
     basis_passed = (
@@ -564,11 +558,11 @@ def fixed_rollout_finite_difference_diagnostic(
         and integrity["requires_grad_flags_restored"]
         and integrity["gradient_buffers_restored"]
     )
-    viable = [comparison for comparison in comparisons if comparison["relative_l2_error"] is not None]
+    viable = [
+        comparison for comparison in comparisons if comparison["relative_l2_error"] is not None
+    ]
     recommended = (
-        min(viable, key=lambda value: float(value["relative_l2_error"]))["mu"]
-        if viable
-        else None
+        min(viable, key=lambda value: float(value["relative_l2_error"]))["mu"] if viable else None
     )
     layout: dict[str, Any]
     try:
@@ -728,9 +722,7 @@ def _real_fixed_rollout(
 
     adapter_digest = lora_state_digest(bundle.model)
     objective_payload = asdict(config.objective)
-    manifest_digest = load_evaluation_split_manifest(
-        config.evaluation_manifest
-    ).manifest_sha256
+    manifest_digest = load_evaluation_split_manifest(config.evaluation_manifest).manifest_sha256
     if cache_path is not None and cache_path.is_file():
         rollout, sampler, metadata = load_fixed_rollout_cache(
             cache_path,
@@ -773,9 +765,7 @@ def _real_fixed_rollout(
     if not 1 <= step <= len(schedule):
         raise ValueError(f"step must lie in [1, {len(schedule)}]")
     schedule_entry = schedule[step - 1]
-    examples = tuple(
-        train_by_id[example_id] for example_id in schedule_entry["example_ids"]
-    )
+    examples = tuple(train_by_id[example_id] for example_id in schedule_entry["example_ids"])
     engine = create_standard_lora_vllm_engine(
         config.model_name,
         revision=config.model_revision,
