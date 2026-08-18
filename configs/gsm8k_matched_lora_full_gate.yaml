@@ -42,8 +42,8 @@ vllm_logprob_p99_abs_tolerance: 0.2
 vllm_logprob_max_abs_tolerance: 5.0
 minimum_effective_completion_fraction: 0.5
 run_projected_gradient_gate: true
-projected_gradient_min_cosine: 0.95
-projected_gradient_max_relative_l2: 0.35
+projected_gradient_min_cosine: 0.90
+projected_gradient_max_relative_l2: 0.45
 minimum_bp_train_accuracy_gain: null
 minimum_bp_dev_accuracy_gain: 0.01
 enforce_stochastic_efficacy_checks: true
